@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import httpx
 import json
+import time
 
 # Get current working directory of the script
 working_directory = __file__.rsplit('/', 1)[0]
@@ -33,7 +34,8 @@ while has_next:
 
 result = {'data': data,
           'total': len(data),
-          'nr_pages': params['page']
+          'nr_pages': params['page'],
+          'last_updated': time.strftime('%Y-%m-%d %H:%M:%S')
          }
 
 with open(f'{working_directory}/{script_name}.json', 'w') as f:

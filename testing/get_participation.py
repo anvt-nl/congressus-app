@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-import requests
+import httpx
 import sys
 import json
+import time
 
 # Get current working directory of the script
 working_directory = __file__.rsplit('/', 1)[0]
@@ -28,11 +29,11 @@ url = f'https://api.congressus.nl/v30/events/{event_id}/participations/{obj_id}'
 
 params = {}
 
-resp = requests.get(url, params=params, headers=headers, timeout=10)
+resp = httpx.get(url, params=params, headers=headers, timeout=10)
 resp.raise_for_status()
 
 result = resp.json()
-
+result['last_updated'] = time.strftime('%Y-%m-%d %H:%M:%S')
 # print (result)
 
 with open(f'{working_directory}/{script_name}_{event_id}-{obj_id}.json', 'w') as f:

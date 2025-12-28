@@ -2,6 +2,7 @@
 import httpx
 import sys
 import json
+import time
 
 # Get current working directory of the script
 working_directory = __file__.rsplit('/', 1)[0]
@@ -28,7 +29,7 @@ url = f'https://api.congressus.nl/v30/events/{event_id}/participations'
 data = []
 while next_page:
 
-    params = {'page_size': 50, 'page': page}
+    params = {'page_size': 100, 'page': page}
 
     resp = httpx.get(url, params=params, headers=headers, timeout=10)
     resp.raise_for_status()
@@ -40,7 +41,8 @@ while next_page:
 result = {'data': data,
             'total': len(data),
             'nr_pages': page,
-            'event_id': event_id
+            'event_id': event_id,
+            'last_updated': time.strftime('%Y-%m-%d %H:%M:%S')
              }
 
 with open(f'{working_directory}/{script_name}_{event_id}.json', 'w') as f:
