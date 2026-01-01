@@ -9,13 +9,15 @@ All this information will be available via API calls to this script via fastAPI.
 """
 
 import json
+import os
 import sqlite3
 import time
 from typing import Dict, List
 
-import fastapi
 import httpx
-from fastapi.middleware.cors import CORSMiddleware
+import fastapi
+from fastapi import Request
+
 
 API_URL = "https://api.congressus.nl/v30"
 API_KEY_PATH = "api-key-2.txt"
@@ -33,14 +35,41 @@ headers = {"Authorization": f"Bearer {api_access_key}"}
 app = fastapi.FastAPI()
 # Expose via FastAPI
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # For production, replace "*" with your domain
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+@app.get("/")
+async def root() -> fastapi.responses.RedirectResponse:
+    """
+    Function to redirect to the main HTML dashboard page.
+    """
 
+    return fastapi.responses.RedirectResponse(url="/html/index.html")
+
+
+@app.get("/html/")
+async def html_root() -> fastapi.responses.RedirectResponse:
+    """
+    Function to redirect to the main HTML dashboard page.
+    """
+
+    return fastapi.responses.RedirectResponse(url="/html/index.html")
+
+
+@app.get("/html/{page_name}")
+async def html_page(page_name: str) -> fastapi.responses.HTMLResponse:
+    """
+    Function to serve HTML pages from the html/ directory.
+
+    :param page_name: Description
+    :type page_name: str
+    """
+
+    if page_name == "":
+        page_name = "index.html"
+    file_path = f"html/{page_name}"
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as file:
+            content = file.read()
+        return fastapi.responses.HTMLResponse(status_code=200, content=content)
+    return fastapi.responses.Response(status_code=404, content="Page not found")
 
 @app.get("/events")
 async def read_events():
