@@ -5,3 +5,4 @@ congressus_cache.db
 __pycache__
 .vscode
 testing/*.txt
+source/venv

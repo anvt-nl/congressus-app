@@ -61,7 +61,7 @@ import fastapi
 
 API_URL = "https://api.congressus.nl/v30"
 API_KEY_PATH = "api-key-2.txt"
-DB_PATH = "congressus_cache.db"
+DB_PATH = os.getenv("CONGRESSUS_CACHE_DB", "/db/congressus_cache.db")
 PAGE_SIZE = 100
 
 # Get current working directory of the script
@@ -415,8 +415,13 @@ def get_participations(event_id: int, force_refresh: bool = False):
             participations.append(json.loads(row[1]))
         log(f"Fetched {len(participations)} participations from DB for event {event_id}.")
 
-    cursor.execute("SELECT data FROM tickets WHERE event_id = ?", (event_id,))
-    tickets = [json.loads(row[0]) for row in cursor.fetchall()]
+    try:
+        cursor.execute("SELECT data FROM tickets WHERE event_id = ?", (event_id,))
+    except sqlite3.OperationalError:
+        log("Tickets table does not exist yet.")
+        tickets = []
+    else:
+        tickets = [json.loads(row[0]) for row in cursor.fetchall()]
     log(f"Fetched {len(tickets)} tickets from DB for event {event_id}.")
     for participation in participations:
         participation_pressence = 0
