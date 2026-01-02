@@ -14,7 +14,8 @@ RUN apt-get update \
     && apt-get clean \
     && pip install --no-cache-dir -r /app/requirements.txt \
     && mkdir /db \
-    && chown -R appuser:appuser /db
+    && chown -R appuser:appuser /db \
+    && rm -rf /var/lib/apt/lists
 
 ENV PYTHONUNBUFFERED=1
 
