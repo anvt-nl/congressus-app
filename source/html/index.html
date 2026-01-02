@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ANVT Dashboard | Local Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-slate-50 min-h-screen pb-20">
+
+    <div class="max-w-7xl mx-auto px-4 py-10">
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
+            <div>
+                <h1 class="text-3xl font-black text-slate-900 tracking-tight">ANVT Events Manager</h1>
+                <p id="api-status" class="text-sm text-slate-500 flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                    Connecting to http://localhost:8000...
+                </p>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="syncBtn" onclick="fetchEvents()" class="flex items-center gap-2 bg-white border px-4 py-2 rounded-lg shadow-sm hover:bg-slate-50 transition">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i> Sync Data
+                </button>
+                <div id="forceSyncMsg" class="hidden text-green-600 text-xs font-semibold ml-4">Force sync complete!</div>
+            </div>
+        </header>
+
+        <div id="eventGrid">
+            <div class="col-span-full flex flex-col items-center py-20 text-slate-400" id="loadingEvents">
+                <div class="animate-spin mb-4"><i data-lucide="loader-2" class="w-10 h-10"></i></div>
+                <p>Fetching events from your backend...</p>
+            </div>
+            <div id="todaySection" class="mb-10">
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="text-xl font-bold">Evenement van vandaag</h2>
+                    <button onclick="toggleSection('today')" id="toggleToday" class="text-xs text-blue-600 underline">Verbergen</button>
+                </div>
+                <div id="todayEvents" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+            </div>
+            <div id="futureSection" class="mb-10">
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="text-xl font-bold">Komende evenementen</h2>
+                    <button onclick="toggleSection('future')" id="toggleFuture" class="text-xs text-blue-600 underline">Verbergen</button>
+                </div>
+                <div id="futureEvents" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+            </div>
+            <div id="pastSection">
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="text-xl font-bold">Oude evenementen</h2>
+                    <button onclick="toggleSection('past')" id="togglePast" class="text-xs text-blue-600 underline">Verbergen</button>
+                </div>
+                <div id="pastEvents" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+            </div>
+        </div>
+    </div>
+
+
+    <script src="index.js"></script>
+</body>
+</html>

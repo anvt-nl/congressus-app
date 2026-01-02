@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event Participations Overview</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="event_heading.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-slate-50 min-h-screen pb-20">
+    <div class="max-w-4xl mx-auto px-4 py-10">
+        <button id="backToEventsBtn" class="mb-6 text-blue-600 underline">&larr; Terug naar evenementen</button>
+        <button id="toggleApprovedBtn" class="mb-6 ml-4 text-blue-600 underline">Toon alles</button>
+        <label class="ml-4 flex items-center gap-2 text-sm">
+            <input type="checkbox" id="hidePresentSwitch" class="accent-blue-600"> Verberg aanwezigen
+        </label>
+        <div class="flex items-center justify-between mb-2">
+            <div>
+                <h1 id="eventHeading" class="text-2xl font-black text-slate-900">Participations Overview</h1>
+                <div id="eventDate" class="text-slate-500 text-base font-normal"></div>
+            </div>
+            <div class="flex gap-2 items-center">
+                <button id="syncBtn" onclick="refreshParticipations()" class="flex items-center gap-2 bg-white border px-4 py-2 rounded-lg shadow-sm hover:bg-slate-50 transition">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i> Sync Data
+                </button>
+                <button id="collectTicketsBtn" class="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-blue-700 transition">
+                    <i data-lucide="ticket" class="w-4 h-4"></i> Collect All Tickets
+                </button>
+            </div>
+            <div id="forceSyncMsg" class="hidden text-green-600 text-xs font-semibold ml-4">Force sync voltooid!</div>
+        </div>
+        <div id="loading" class="text-slate-500 mb-4">Deelnemers laden...</div>
+        <div id="participationsTable"></div>
+    </div>
+    <script src="participations_overview.js"></script>
+</body>
+</html>

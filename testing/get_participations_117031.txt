@@ -1,3 +1,0 @@
-URL: https://api.congressus.nl/v30/events/117031/participations
-Event ID: 117031
-Params: {'page_size': 100, 'page': 1}
