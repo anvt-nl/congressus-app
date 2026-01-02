@@ -51,12 +51,12 @@ import sqlite3
 import time
 from datetime import datetime, timedelta
 from typing import Dict, List
-            
+
 
 import httpx
 import fastapi
-from fastapi import Request
-from fastapi.responses import StreamingResponse
+# from fastapi import Request
+# from fastapi.responses import StreamingResponse
 
 
 API_URL = "https://api.congressus.nl/v30"
@@ -235,9 +235,9 @@ def get_events(force_refresh: bool = False):
             for index, event in enumerate(events):
                 start = event["start"]
                 # Check if date start is max 1 day in the future, current day, or in the past
+                log (start)
                 today = time.strftime("%Y-%m-%d")
-                from datetime import datetime, timedelta
-                start_dt = datetime.strptime(start, "%Y-%m-%d")
+                start_dt = datetime.strptime(start, "%Y-%m-%dT%H:%M:%S")
                 today_dt = datetime.strptime(today, "%Y-%m-%d")
                 present_leden = 0
                 present_vrijrijders = 0

@@ -1,0 +1,124 @@
+---
+name: Release and Publish
+
+on:
+  # We use 'push' to main instead of 'pull_request closed'.
+  # It is more reliable for "Post-Merge" actions.
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write # Needed to push the git tag
+  packages: write # Needed to push the docker image
+
+jobs:
+  # JOB 1: Calculate the new version and push the Git Tag
+  create_tag:
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.bump_version.outputs.new_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required for version calculation
+          # Must be true so the tag action can push back to the repo
+          persist-credentials: true
+
+      - name: Bump version and push tag
+        id: bump_version
+        uses: anothrNick/github-tag-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WITH_V: false
+          DEFAULT_BUMP: minor
+          GIT_API_TAGGING: true
+          INITIAL_VERSION: 0.4.0
+
+  # JOB 2: Build and Push the Docker Image
+  build_publish:
+    needs: create_tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # --- STEP 1: CALCULATE IMAGE NAME (Generic) ---
+      - name: Calculate Image Name
+        id: image_name
+        run: |
+          # 1. Get the repo name (e.g., "docker-px-orphan-cleanup")
+          REPO_NAME="${{ github.event.repository.name }}"
+
+          # 2. Remove "docker-" prefix if present
+          # syntax: ${variable#prefix} removes prefix
+          CLEAN_NAME="${REPO_NAME#docker-}"
+
+          # 3. Construct full image path
+          # automatically generic: ghcr.io/owner/clean-name
+          # We use generic 'repository_owner' to handle org names correctly
+          IMAGE_PATH="ghcr.io/${{ github.repository_owner }}/${CLEAN_NAME}"
+
+          # 4. Output for next steps (lowercase just in case)
+          echo "image_path=${IMAGE_PATH,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate Docker Metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # Use the calculated generic name from previous step
+          images: ${{ steps.image_name.outputs.image_path }}
+          tags: |
+            # Tag with the version we just created (e.g., 0.4.1)
+            type=raw,value=${{ needs.create_tag.outputs.new_tag }}
+            # Also tag with latest
+            type=raw,value=latest
+
+      # --- STEP 2: BUILD AND PUSH ---
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Use caching to speed up release if PRs already populated cache
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # --- STEP 3: GENERATE SBOM (After Push) ---
+      - name: Generate SBOM
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: image
+          format: cyclonedx
+          output: sbom.json
+          # Scan the exact version tag we just pushed
+          image-ref: ${{ steps.image_name.outputs.image_path }}:${{ needs.create_tag.outputs.new_tag }}
+        env:
+          # Required to pull the private image from GHCR
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- STEP 4: UPLOAD SBOM ---
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-cyclonedx-${{ needs.create_tag.outputs.new_tag }}
+          path: sbom.json
+          retention-days: 90 # Keep release SBOMs longer
