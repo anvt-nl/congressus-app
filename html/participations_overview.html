@@ -11,14 +11,20 @@
 <body class="bg-slate-50 min-h-screen pb-20">
     <div class="max-w-4xl mx-auto px-4 py-10">
         <button id="backToEventsBtn" class="mb-6 text-blue-600 underline">&larr; Terug naar evenementen</button>
+        <button id="toggleApprovedBtn" class="mb-6 ml-4 text-blue-600 underline">Toon alles</button>
         <div class="flex items-center justify-between mb-2">
             <div>
                 <h1 id="eventHeading" class="text-2xl font-black text-slate-900">Participations Overview</h1>
                 <div id="eventDate" class="text-slate-500 text-base font-normal"></div>
             </div>
-            <button id="syncBtn" onclick="refreshParticipations()" class="flex items-center gap-2 bg-white border px-4 py-2 rounded-lg shadow-sm hover:bg-slate-50 transition">
-                <i data-lucide="refresh-cw" class="w-4 h-4"></i> Sync Data
-            </button>
+            <div class="flex gap-2 items-center">
+                <button id="syncBtn" onclick="refreshParticipations()" class="flex items-center gap-2 bg-white border px-4 py-2 rounded-lg shadow-sm hover:bg-slate-50 transition">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i> Sync Data
+                </button>
+                <button id="collectTicketsBtn" class="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-blue-700 transition">
+                    <i data-lucide="ticket" class="w-4 h-4"></i> Collect All Tickets
+                </button>
+            </div>
             <div id="forceSyncMsg" class="hidden text-green-600 text-xs font-semibold ml-4">Force sync voltooid!</div>
         </div>
         <div id="loading" class="text-slate-500 mb-4">Deelnemers laden...</div>
@@ -34,73 +40,90 @@
                     window.location = 'index.html';
                 };
             }
+            const collectBtn = document.getElementById('collectTicketsBtn');
+            if (collectBtn) {
+                collectBtn.onclick = collectAllTickets;
+            }
+            // Register toggle button event
+            const toggleBtn = document.getElementById('toggleApprovedBtn');
+            if (toggleBtn) {
+                toggleBtn.onclick = function() {
+                    showOnlyApproved = !showOnlyApproved;
+                    toggleBtn.textContent = showOnlyApproved ? 'Toon alles' : 'Toon alleen goedgekeurd';
+                    renderTable();
+                };
+            }
         });
 
-                                    // Visual confirmation for force sync
-                                    function showForceSyncMsg() {
-                                        const msg = document.getElementById('forceSyncMsg');
-                                        msg.classList.remove('hidden');
-                                        setTimeout(() => msg.classList.add('hidden'), 2000);
-                                    }
+        // Visual confirmation for force sync
+        function showForceSyncMsg() {
+            const msg = document.getElementById('forceSyncMsg');
+            msg.classList.remove('hidden');
+            setTimeout(() => msg.classList.add('hidden'), 2000);
+        }
 
-                                    // Confirm before force sync
-                                    async function confirmAndForceSync() {
-                                        const proceed = confirm('Weet je zeker dat je wilt force syncen? Dit haalt namelijk alle aanmeldingen opnieuw op van de backend.');
-                                        if (!proceed) return false;
-                                        return true;
-                                    }
+        // Confirm before force sync
+        async function confirmAndForceSync() {
+            const proceed = confirm('Weet je zeker dat je wilt force syncen? Dit haalt namelijk alle aanmeldingen opnieuw op van de backend.');
+            if (!proceed) return false;
+            return true;
+        }
 
-                                    // Hidden force sync: Ctrl+Shift+R (desktop)
-                                    document.addEventListener('keydown', async (e) => {
-                                        if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'r') {
-                                            if (eventId && await confirmAndForceSync()) {
-                                                document.getElementById('loading').style.display = '';
-                                                try {
-                                                    await fetch(`http://localhost:8000/participations/${eventId}/refresh`, { method: 'GET' });
-                                                    showForceSyncMsg();
-                                                } catch {}
-                                                fetchParticipations(eventId);
-                                            }
-                                        }
-                                    });
-
-                                    // Hidden force sync: long-press on Sync Data button (mobile)
-                                    let forceSyncTimeout;
-                                    const syncBtn = document.getElementById('syncBtn');
-                                    syncBtn.addEventListener('touchstart', function() {
-                                        forceSyncTimeout = setTimeout(async () => {
-                                            if (eventId && await confirmAndForceSync()) {
-                                                document.getElementById('loading').style.display = '';
-                                                try {
-                                                    await fetch(`http://localhost:8000/participations/${eventId}/refresh`, { method: 'GET' });
-                                                    showForceSyncMsg();
-                                                } catch {}
-                                                fetchParticipations(eventId);
-                                            }
-                                        }, 2000); // 2 seconds long-press
-                                    });
-                                    syncBtn.addEventListener('touchend', function() {
-                                        clearTimeout(forceSyncTimeout);
-                                    });
-                            // Hidden force sync: Ctrl+Shift+R
-                            document.addEventListener('keydown', async (e) => {
-                                if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'r') {
-                                    if (eventId) {
-                                        document.getElementById('loading').style.display = '';
-                                        try {
-                                            await fetch(`http://localhost:8000/participations/${eventId}/refresh`, { method: 'GET' });
-                                        } catch {}
-                                        fetchParticipations(eventId);
-                                    }
-                                }
-                            });
-                    // Render lucide icons after DOM update
-                    document.addEventListener('DOMContentLoaded', () => { if (window.lucide) lucide.createIcons(); });
-                    function rerenderIcons() { if (window.lucide) lucide.createIcons(); }
-                function refreshParticipations() {
-                    if (eventId) fetchParticipations(eventId);
-                    rerenderIcons();
+        // Hidden force sync: Ctrl+Shift+R (desktop)
+        document.addEventListener('keydown', async (e) => {
+            if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'r') {
+                if (eventId && await confirmAndForceSync()) {
+                    document.getElementById('loading').style.display = '';
+                    try {
+                        await fetch(`http://localhost:8000/participations/${eventId}/refresh`, { method: 'GET' });
+                        showForceSyncMsg();
+                    } catch {}
+                    fetchParticipations(eventId);
                 }
+            }
+        });
+
+        // Hidden force sync: long-press on Sync Data button (mobile)
+        let forceSyncTimeout;
+        const syncBtn = document.getElementById('syncBtn');
+        syncBtn.addEventListener('touchstart', function() {
+            forceSyncTimeout = setTimeout(async () => {
+                if (eventId && await confirmAndForceSync()) {
+                    document.getElementById('loading').style.display = '';
+                    try {
+                        await fetch(`http://localhost:8000/participations/${eventId}/refresh`, { method: 'GET' });
+                        showForceSyncMsg();
+                    } catch {}
+                    fetchParticipations(eventId);
+                }
+            }, 2000); // 2 seconds long-press
+        });
+        syncBtn.addEventListener('touchend', function() {
+            clearTimeout(forceSyncTimeout);
+        });
+
+        // Hidden force sync: Ctrl+Shift+R
+        document.addEventListener('keydown', async (e) => {
+            if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'r') {
+                if (eventId) {
+                    document.getElementById('loading').style.display = '';
+                    try {
+                        await fetch(`http://localhost:8000/participations/${eventId}/refresh`, { method: 'GET' });
+                    } catch {}
+                    fetchParticipations(eventId);
+                }
+            }
+        });
+
+        // Render lucide icons after DOM update
+        document.addEventListener('DOMContentLoaded', () => { if (window.lucide) lucide.createIcons(); });
+        function rerenderIcons() { if (window.lucide) lucide.createIcons(); }
+
+        function refreshParticipations() {
+            if (eventId) fetchParticipations(eventId);
+            rerenderIcons();
+        }
+
         async function fetchParticipations(eventId) {
             document.getElementById('loading').style.display = '';
             try {
@@ -114,12 +137,20 @@
         }
 
         let currentSort = { key: null, asc: true };
+            // Track toggle for approved-only view
+            let showOnlyApproved = true;
         // Track hidden state of each section
         let sectionVisibility = {};
         let participationsData = [];
+        let participationsRawData = [];
 
         function renderTable(participations) {
-            participationsData = participations.slice();
+            // Only update raw data if new data is passed (from fetch)
+            if (participations) {
+                participationsRawData = participations.slice();
+            }
+            // Always filter from raw data
+            participationsData = participationsRawData.slice();
             if (!participationsData.length) {
                 document.getElementById('participationsTable').innerHTML = '<div class="text-slate-400">No participations found for this event.</div>';
                 return;
@@ -134,13 +165,14 @@
                 if (aVal > bVal) return sortAsc ? 1 : -1;
                 return 0;
             });
-            const members = participationsData.filter(p => p.member_id);
-            const vrijrijders = participationsData.filter(p => !p.member_id);
+            let filteredData = showOnlyApproved ? participationsData.filter(p => p.status === 'approved') : participationsData;
+            const members = filteredData.filter(p => p.member_id);
+            const vrijrijders = filteredData.filter(p => !p.member_id);
 
             let html = '';
-            html += renderSubTable('Leden', members);
+            html += renderSubTable('Leden', members, showOnlyApproved);
             html += '<div class="h-8"></div>';
-            html += renderSubTable('Vrijrijders', vrijrijders);
+            html += renderSubTable('Vrijrijders', vrijrijders, showOnlyApproved);
             document.getElementById('participationsTable').innerHTML = html;
             rerenderIcons();
         }
@@ -156,7 +188,6 @@
             const displayStyle = sectionVisibility[sectionId] === false ? 'display:none;' : '';
             html += `<div id="${sectionId}" style="${displayStyle}" class="overflow-x-auto"><table class="min-w-full bg-white rounded-xl shadow"><thead><tr>`;
             // Add sort indicators
-            // Use a smaller arrow with a stick (U+25B4/U+25BE)
             const arrow = (key) => {
                 if (currentSort.key === key) {
                     return currentSort.asc ? ' &#8595;' : ' &#8593;';
@@ -165,13 +196,11 @@
             };
             html += `<th class="px-4 py-2 text-left cursor-pointer select-none" onclick="sortTable('addressee')">Naam${arrow('addressee')}</th>`;
             html += `<th class="px-4 py-2 text-left cursor-pointer select-none" onclick="sortTable('email')">Email${arrow('email')}</th>`;
-            html += `<th class="px-4 py-2 text-left">Status</th>`;
+            if (!arguments[2]) html += `<th class="px-4 py-2 text-left">Status</th>`;
             html += `<th class="px-4 py-2 text-left">Aanwezig</th>`;
             html += '</tr></thead><tbody>';
             for (const p of rows) {
-                // Use p.id or p.ticket_id as the unique identifier for the ticket page
                 const ticketId = p.id || p.ticket_id || p.member_id || '';
-                // Use presence_count and tickets for present/bought
                 let present = (typeof p.presence_count !== 'undefined' && p.presence_count !== null) ? p.presence_count : '';
                 let bought = (typeof p.tickets !== 'undefined') ? p.tickets : '';
                 let presenceStr = '-';
@@ -183,10 +212,13 @@
                 let isApproved = p.status === 'approved';
                 let trClass = 'border-t transition' + (isApproved ? ' cursor-pointer hover:bg-slate-100' : ' bg-slate-50');
                 let trOnClick = isApproved ? `onclick=\"window.location.href='ticket.html?event_id=${eventId}&ticket_id=${ticketId}'\"` : '';
-                html += `<tr class=\"${trClass}\" ${trOnClick}>\n                    <td class=\"px-4 py-2\">${p.addressee || ''}</td>\n                    <td class=\"px-4 py-2\">${p.email || ''}</td>\n                    <td class=\"px-4 py-2\">${p.status || ''}</td>\n                    <td class=\"px-4 py-2\">${presenceStr}</td>\n                </tr>`;
+                html += `<tr class=\"${trClass}\" ${trOnClick}>\n                    <td class=\"px-4 py-2\">${p.addressee || ''}</td>\n                    <td class=\"px-4 py-2\">${p.email || ''}</td>`;
+                if (!arguments[2]) html += `\n                    <td class=\"px-4 py-2\">${p.status || ''}</td>`;
+                html += `\n                    <td class=\"px-4 py-2\">${presenceStr}</td>\n                </tr>`;
             }
             html += '</tbody></table></div></div>';
             return html;
+                // ...existing code...
         }
 
         window.toggleTable = function(sectionId) {
@@ -243,6 +275,27 @@
             fetchEventDetails(eventId);
         } else {
             document.getElementById('loading').textContent = 'No event ID provided.';
+        }
+
+        // Collect all tickets for this event
+        async function collectAllTickets() {
+            if (!eventId) return;
+            const btn = document.getElementById('collectTicketsBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="animate-spin mr-2"><i data-lucide="loader" class="w-4 h-4"></i></span> Collecting...';
+            try {
+                const response = await fetch(`http://localhost:8000/event/${eventId}/collect-tickets`, { method: 'GET' });
+                if (response.ok) {
+                    alert('Tickets collected successfully!');
+                } else {
+                    alert('Failed to collect tickets.');
+                }
+            } catch (err) {
+                alert('Error contacting backend.');
+            }
+            btn.disabled = false;
+            btn.innerHTML = '<i data-lucide="ticket" class="w-4 h-4"></i> Collect All Tickets';
+            rerenderIcons();
         }
     </script>
 </body>
