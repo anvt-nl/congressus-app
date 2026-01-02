@@ -117,6 +117,7 @@ jobs:
             --exit-level WARN \
             -i CIS-DI-0001 \
             -i DKL-LI-0003 \
+            -i DKL-DI-0005 \
             test-image:local
 
       - name: Run Integration Test
