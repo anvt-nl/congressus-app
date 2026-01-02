@@ -309,6 +309,8 @@ def filter_events(events_list: List[Dict]) -> List[Dict]:
                 "leden_sold_tickets": leden_sold_tickets,
                 "niet_leden_num_tickets": niet_leden_num_tickets,
                 "niet_leden_sold_tickets": niet_leden_sold_tickets,
+                "present_leden": event.get("present_leden", 0),
+                "present_vrijrijders": event.get("present_vrijrijders", 0),
             }
         )
     return return_events
