@@ -4,3 +4,4 @@ congressus_cache.db
 .trunk
 __pycache__
 .vscode
+testing/*.txt
