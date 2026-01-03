@@ -73,7 +73,64 @@ api_access_key = open(f"{WORKING_DIRECTORY}/{API_KEY_PATH}").read().strip()
 headers = {"Authorization": f"Bearer {api_access_key}"}
 
 app = fastapi.FastAPI()
+HTTP_CLIENT = httpx.Client(headers=headers, timeout=10)
+
+def init_db():
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS events (
+                event_id TEXT PRIMARY KEY,
+                data TEXT,
+                last_updated TEXT
+            )
+        """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS participations (
+                participation_id TEXT PRIMARY KEY,
+                event_id TEXT,
+                data TEXT,
+                last_updated TEXT
+            )
+        """
+        )
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_participations_event_id ON participations(event_id)")
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tickets (
+                obj_id TEXT PRIMARY KEY,
+                event_id TEXT,
+                data TEXT,
+                last_updated TEXT
+            )
+        """
+        )
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tickets_event_id ON tickets(event_id)")
+        conn.commit()
+
+# Initialize DB on startup
+init_db()
+
 # Expose via FastAPI
+@app.get("/")
+# ... (rest of the code) ...
+
+# In get_events:
+# Remove CREATE TABLE
+
+# In get_participations:
+# Remove CREATE TABLE
+
+# In get_ticket:
+# Remove CREATE TABLE
+
+# In functions using httpx.get or httpx.post, use HTTP_CLIENT.get/post without passing headers/timeout repeatedly if they are standard. 
+# But wait, some requests might need different params.
+# HTTP_CLIENT has base headers.
+
 
 @app.get("/")
 async def root() -> fastapi.responses.RedirectResponse:
@@ -169,16 +226,10 @@ def get_events(force_refresh: bool = False):
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
 
-        # Create tables if they don't exist
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS events (
-                event_id TEXT PRIMARY KEY,
-                data TEXT,
-                last_updated TEXT
-            )
-        """
-        )
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        
+        # Table creation moved to init_db
 
         # fetch all events from sqlite
         cursor.execute("SELECT event_id FROM events")
@@ -195,7 +246,8 @@ def get_events(force_refresh: bool = False):
             events: List[Dict] = []
 
             while has_next:
-                resp = httpx.get(url, params=params, headers=headers, timeout=10)
+                # Use global client
+                resp = HTTP_CLIENT.get(url, params=params)
                 resp.raise_for_status()
 
                 events += resp.json().get("data", [])
@@ -329,16 +381,7 @@ def get_participations(event_id: int, force_refresh: bool = False):
     cursor = conn.cursor()
 
     # Fetch all participations from sqlite
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS participations (
-            participation_id TEXT PRIMARY KEY,
-            event_id TEXT,
-            data TEXT,
-            last_updated TEXT
-        )
-    """
-    )
+    # Fetch all participations from sqlite
 
     cursor.execute(
         "SELECT participation_id, data, last_updated FROM participations WHERE event_id = ?",
@@ -359,7 +402,7 @@ def get_participations(event_id: int, force_refresh: bool = False):
         participations: List[Dict] = []
 
         while has_next:
-            resp = httpx.get(url, params=params, headers=headers, timeout=10)
+            resp = HTTP_CLIENT.get(url, params=params)
             resp.raise_for_status()
 
             participations += resp.json().get("data", [])
@@ -458,16 +501,7 @@ def get_participations(event_id: int, force_refresh: bool = False):
 def get_ticket(event_id: str, obj_id: str, refresh: bool = False):
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS tickets (
-                obj_id TEXT PRIMARY KEY,
-                event_id TEXT,
-                data TEXT,
-                last_updated TEXT
-            )
-        """
-        )
+
 
         cursor.execute(
             "SELECT data, last_updated FROM tickets WHERE obj_id = ? AND event_id = ?", (obj_id, event_id)
@@ -489,7 +523,7 @@ def get_ticket(event_id: str, obj_id: str, refresh: bool = False):
                 
             # https://api.congressus.nl/v30/events/{event_id}/participations/{obj_id}'
             url = f"{API_URL}/events/{event_id}/participations/{obj_id}"
-            resp = httpx.get(url, headers=headers, timeout=10)
+            resp = HTTP_CLIENT.get(url)
             resp.raise_for_status()
 
             data = resp.json()
@@ -562,7 +596,7 @@ def do_update_ticket(event_id: str, obj_id: str, new_status: str):
     url = f"{API_URL}/events/{event_id}/participations/{obj_id}/set-presence"
     log(f"Updating ticket {obj_id} to status_presence {new_status}...")
     payload = {"status_presence": new_status}
-    resp = httpx.post(url, headers=headers, json=payload, timeout=10)
+    resp = HTTP_CLIENT.post(url, json=payload)
     resp.raise_for_status()
 
     conn.close()
