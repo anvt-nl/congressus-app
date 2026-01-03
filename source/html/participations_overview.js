@@ -94,18 +94,25 @@ function refreshParticipations() {
 }
 
 async function fetchParticipations(eventId) {
+	console.log("Fetching participations for event:", eventId);
 	document.getElementById("loading").style.display = "";
 	try {
+		console.log("Starting fetch request...");
 		const response = await fetch(
 			`/participations/${eventId}`,
 		);
+		console.log("Fetch response status:", response.status);
+		if (!response.ok) throw new Error("Network response was not ok: " + response.statusText);
 		const data = await response.json();
+		console.log("Data received, rendering table...");
 		renderTable(data);
 	} catch (err) {
+		console.error("Fetch error:", err);
 		document.getElementById("participationsTable").innerHTML =
-			'<div class="text-red-500">Failed to load participations.</div>';
+			'<div class="text-red-500">Failed to load participations: ' + err.message + '</div>';
+	} finally {
+		document.getElementById("loading").style.display = "none";
 	}
-	document.getElementById("loading").style.display = "none";
 }
 
 const currentSort = { key: null, asc: true };
@@ -270,10 +277,12 @@ window.sortTable = (key) => {
 // Get event_id from query string
 const params = new URLSearchParams(window.location.search);
 const eventId = params.get("event_id");
+console.log("Parsed eventId:", eventId);
 if (eventId) {
 	fetchParticipations(eventId);
 	if (typeof fetchEventDetails === "function") fetchEventDetails(eventId);
 } else {
+	console.error("No event ID in URL params");
 	document.getElementById("loading").textContent = "No event ID provided.";
 }
 

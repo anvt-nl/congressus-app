@@ -34,6 +34,41 @@
         <div id="loading" class="text-slate-500 mb-4">Deelnemers laden...</div>
         <div id="participationsTable"></div>
     </div>
+
+    <div id="debug-console" class="fixed bottom-0 left-0 right-0 h-48 bg-black text-green-400 p-4 font-mono text-xs overflow-y-auto opacity-90 z-50 pointer-events-none">
+        <div>DEBUG LOG:</div>
+    </div>
+    <script>
+        (function() {
+            var oldLog = console.log;
+            var oldError = console.error;
+            var debugConsole = document.getElementById('debug-console');
+            
+            function appendLog(msg, type) {
+                var div = document.createElement('div');
+                div.textContent = (type ? '[' + type + '] ' : '') + msg;
+                if (type === 'ERROR') div.style.color = '#ff5555';
+                debugConsole.appendChild(div);
+                debugConsole.scrollTop = debugConsole.scrollHeight;
+            }
+
+            console.log = function() {
+                var args = Array.from(arguments);
+                appendLog(args.join(' '));
+                oldLog.apply(console, arguments);
+            };
+
+            console.error = function() {
+                var args = Array.from(arguments);
+                appendLog(args.join(' '), 'ERROR');
+                oldError.apply(console, arguments);
+            };
+
+            window.addEventListener('error', function(e) {
+                appendLog(e.message + ' at ' + e.filename + ':' + e.lineno, 'CRITICAL');
+            });
+        })();
+    </script>
     <script src="participations_overview.js"></script>
 </body>
 </html>
