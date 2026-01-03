@@ -578,20 +578,37 @@ def collect_tickets_for_event(event_id: str):
     participations = get_participations(event_id, force_refresh=True)
     log(f"Collected {len(participations)} participations for event {event_id}.")
 
-    refreshed_count = 0
-    for participation in participations:
-        obj_id = participation["id"]
-        if participation.get("status") != "approved":
-            log(f"Skipping participation {obj_id} with status {participation.get('status')}.")
-            continue
+    import concurrent.futures
 
+    # Filter participations that need updating
+    to_update = []
+    for participation in participations:
+        if participation.get("status") != "approved":
+            continue
+        obj_id = participation["id"]
         ticket_data = get_ticket(event_id, obj_id, refresh=False)
+        # Skip if already present
         if ticket_data.get("tickets") is not None and len(ticket_data.get("tickets")) > 0 and ticket_data["tickets"][0].get("status_presence") is not None and ticket_data["tickets"][0]["status_presence"] == "present":
             log(f"Ticket data for participation {obj_id} already exists and is present. Skipping refresh.")
             continue
-        ticket_data = get_ticket(event_id, obj_id, refresh=True)
-        refreshed_count += 1
-        log(f"Collected ticket data for participation {obj_id} for event {event_id}.")
+        to_update.append(obj_id)
+
+    log(f"Found {len(to_update)} participations needing ticket update.")
+    
+    refreshed_count = 0
+    # Use ThreadPoolExecutor to fetch tickets concurrently
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_obj_id = {executor.submit(get_ticket, event_id, obj_id, refresh=True): obj_id for obj_id in to_update}
+        for future in concurrent.futures.as_completed(future_to_obj_id):
+            obj_id = future_to_obj_id[future]
+            try:
+                future.result()
+                refreshed_count += 1
+                if refreshed_count % 5 == 0:
+                    log(f"Progress: {refreshed_count}/{len(to_update)} updated.")
+            except Exception as exc:
+                log(f"Generated an exception for {obj_id}: {exc}")
+
     log(f"Refreshed ticket data for {refreshed_count} participations for event {event_id}.")
     return {"status": "success", "message": f"Collected tickets for event {event_id}."}
 
