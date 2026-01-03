@@ -21,7 +21,7 @@ async function fetchTicketDetails() {
 	}
 	try {
 		const response = await fetch(
-			`http://localhost:8000/ticket/${eventId}/${ticketId}`,
+			`/ticket/${eventId}/${ticketId}`,
 		);
 		if (!response.ok) throw new Error("Not found");
 		const data = await response.json();
@@ -114,7 +114,7 @@ window.showPresenceOverlay = (idx) => {
 		// Send update to backend
 		try {
 			await fetch(
-				`http://localhost:8000/ticket/${eventId}/${ticketId}/${newStatus}`,
+				`/ticket/${eventId}/${ticketId}/${newStatus}`,
 				{
 					method: "GET",
 					headers: { "Content-Type": "application/json" },
