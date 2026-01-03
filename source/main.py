@@ -112,42 +112,50 @@ async def html_page(page_name: str) -> fastapi.responses.HTMLResponse:
     return fastapi.responses.Response(status_code=404, content="Page not found")
 
 @app.get("/events")
-async def read_events():
+def read_events():
+    log("Handling GET /events")
     return get_events(force_refresh=False)
 
 
 @app.get("/events/refresh")
-async def refresh_events():
+def refresh_events():
+    log("Handling GET /events/refresh")
     return get_events(force_refresh=True)
 
 
 @app.get("/event/{event_id}")
-async def read_event(event_id: str):
+def read_event(event_id: str):
+    log(f"Handling GET /event/{event_id}")
     return get_event(event_id)
 
 
 @app.get("/event/{event_id}/collect-tickets")
-async def collect_tickets(event_id: str):
+def collect_tickets(event_id: str):
+    log(f"Handling GET /event/{event_id}/collect-tickets")
     return collect_tickets_for_event(event_id)
 
 
 @app.get("/participations/{event_id}")
-async def read_participations(event_id: str):
+def read_participations(event_id: str):
+    log(f"Handling GET /participations/{event_id}")
     return get_participations(event_id, force_refresh=False)
 
 
 @app.get("/participations/{event_id}/refresh")
-async def refresh_participations(event_id: str):
+def refresh_participations(event_id: str):
+    log(f"Handling GET /participations/{event_id}/refresh")
     return get_participations(event_id, force_refresh=True)
 
 
 @app.get("/ticket/{event_id}/{obj_id}")
-async def read_ticket(event_id: str, obj_id: str):
+def read_ticket(event_id: str, obj_id: str):
+    log(f"Handling GET /ticket/{event_id}/{obj_id}")
     return get_ticket(event_id, obj_id)
 
 
 @app.get("/ticket/{event_id}/{obj_id}/{new_status}")
-async def update_ticket(event_id: str, obj_id: str, new_status: str):
+def update_ticket(event_id: str, obj_id: str, new_status: str):
+    log(f"Handling GET /ticket/{event_id}/{obj_id}/{new_status}")
     return do_update_ticket(event_id, obj_id, new_status)
 
 
