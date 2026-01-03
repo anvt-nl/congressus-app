@@ -175,9 +175,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function renderSubTable(title, rows) {
 	if (!rows.length) return "";
+	// Calculate stats
+	const total = rows.length;
+	const presentCount = rows.filter(p => p.presence_count > 0).length;
+
 	const sectionId = "section_" + title.replace(/\s+/g, "").toLowerCase();
 	let html = `<div class="mb-4"><div class="flex items-center justify-between mt-6 mb-2">`;
-	html += `<h2 class="text-lg font-bold">${title}</h2>`;
+	html += `<h2 class="text-lg font-bold">${title} <span class="text-slate-500 font-normal text-sm">(${presentCount} / ${total})</span></h2>`;
 	html += `<button type="button" onclick="toggleTable('${sectionId}')" id="btn_${sectionId}" class="text-xs text-blue-600 underline ml-4">Verberg</button>`;
 	html += `</div>`;
 	// Set display style based on sectionVisibility
