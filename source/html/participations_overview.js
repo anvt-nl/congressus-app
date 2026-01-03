@@ -183,7 +183,7 @@ function renderSubTable(title, rows) {
 	// Set display style based on sectionVisibility
 	const displayStyle =
 		sectionVisibility[sectionId] === false ? "display:none;" : "";
-	html += `<div id="${sectionId}" style="${displayStyle}" class="overflow-x-auto"><table class="min-w-full bg-white rounded-xl shadow"><thead><tr>`;
+	html += `<div id="${sectionId}" style="${displayStyle}" class="overflow-x-auto"><table class="min-w-full bg-white rounded-xl shadow text-sm"><thead><tr>`;
 	// Add sort indicators
 	const arrow = (key) => {
 		if (currentSort.key === key) {
@@ -191,10 +191,10 @@ function renderSubTable(title, rows) {
 		}
 		return "";
 	};
-	html += `<th class="px-4 py-2 text-left cursor-pointer select-none" onclick="sortTable('addressee')">Naam${arrow("addressee")}</th>`;
-	html += `<th class="px-4 py-2 text-left cursor-pointer select-none" onclick="sortTable('email')">Email${arrow("email")}</th>`;
-	if (!arguments[2]) html += `<th class="px-4 py-2 text-left">Status</th>`;
-	html += `<th class="px-4 py-2 text-left">Aanwezig</th>`;
+	html += `<th class="px-2 py-2 text-left cursor-pointer select-none" onclick="sortTable('addressee')">Naam${arrow("addressee")}</th>`;
+	html += `<th class="px-2 py-2 text-left cursor-pointer select-none" onclick="sortTable('email')">Email${arrow("email")}</th>`;
+	if (!arguments[2]) html += `<th class="px-2 py-2 text-left">Status</th>`;
+	html += `<th class="px-2 py-2 text-left">Aanw.</th>`;
 	html += "</tr></thead><tbody>";
 	for (const p of rows) {
 		const ticketId = p.id || p.ticket_id || p.member_id || "";
@@ -216,10 +216,10 @@ function renderSubTable(title, rows) {
 		const trOnClick = isApproved
 			? `onclick="window.location.href='ticket.html?event_id=${eventId}&ticket_id=${ticketId}'"`
 			: "";
-		html += `<tr class="${trClass}" ${trOnClick}>\n            <td class="px-4 py-2">${p.addressee || ""}</td>\n            <td class="px-4 py-2">${p.email || ""}</td>`;
+		html += `<tr class="${trClass}" ${trOnClick}>\n            <td class="px-2 py-2 truncate max-w-[120px]" title="${p.addressee}">${p.addressee || ""}</td>\n            <td class="px-2 py-2 truncate max-w-[120px]" title="${p.email}">${p.email || ""}</td>`;
 		if (!arguments[2])
-			html += `\n            <td class="px-4 py-2">${p.status || ""}</td>`;
-		html += `\n            <td class="px-4 py-2">${presenceStr}</td>\n        </tr>`;
+			html += `\n            <td class="px-2 py-2">${p.status || ""}</td>`;
+		html += `\n            <td class="px-2 py-2">${presenceStr}</td>\n        </tr>`;
 	}
 	html += "</tbody></table></div></div>";
 	return html;

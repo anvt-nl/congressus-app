@@ -16,6 +16,9 @@
         <label class="ml-4 flex items-center gap-2 text-sm">
             <input type="checkbox" id="hidePresentSwitch" class="accent-blue-600"> Verberg aanwezigen
         </label>
+        <label class="ml-4 flex items-center gap-2 text-sm">
+            <input type="checkbox" id="debugToggle" class="accent-red-600"> Debug Mode
+        </label>
         <div class="flex items-center justify-between mb-2">
             <div>
                 <h1 id="eventHeading" class="text-2xl font-black text-slate-900">Participations Overview</h1>
@@ -35,7 +38,7 @@
         <div id="participationsTable"></div>
     </div>
 
-    <div id="debug-console" class="fixed bottom-0 left-0 right-0 h-48 bg-black text-green-400 p-4 font-mono text-xs overflow-y-auto opacity-90 z-50 pointer-events-none">
+    <div id="debug-console" class="hidden fixed bottom-0 left-0 right-0 h-48 bg-black text-green-400 p-4 font-mono text-xs overflow-y-auto opacity-90 z-50">
         <div>DEBUG LOG:</div>
     </div>
     <script>
@@ -66,6 +69,16 @@
 
             window.addEventListener('error', function(e) {
                 appendLog(e.message + ' at ' + e.filename + ':' + e.lineno, 'CRITICAL');
+            });
+
+            // Toggle Logic
+            var debugToggle = document.getElementById('debugToggle');
+            debugToggle.addEventListener('change', function(e) {
+                if(e.target.checked) {
+                    debugConsole.classList.remove('hidden');
+                } else {
+                    debugConsole.classList.add('hidden');
+                }
             });
         })();
     </script>
