@@ -23,7 +23,7 @@ document.addEventListener("keydown", async (e) => {
 			document.getElementById("api-status").innerHTML =
 				`<span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span> Force syncing...`;
 			try {
-				await fetch("http://localhost:8000/events/refresh", { method: "POST" });
+				await fetch("/events/refresh", { method: "POST" });
 				showForceSyncMsg();
 			} catch {}
 			fetchEvents();
@@ -40,7 +40,7 @@ syncBtn.addEventListener("touchstart", () => {
 			document.getElementById("api-status").innerHTML =
 				`<span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span> Force syncing...`;
 			try {
-				await fetch("http://localhost:8000/events/refresh", { method: "POST" });
+				await fetch("/events/refresh", { method: "POST" });
 				showForceSyncMsg();
 			} catch {}
 			fetchEvents();
@@ -51,7 +51,7 @@ syncBtn.addEventListener("touchend", () => {
 	clearTimeout(forceSyncTimeout);
 });
 
-const API_URL = "http://localhost:8000/events";
+const API_URL = "/events";
 let allEvents = [];
 
 // 1. Fetch Data from Backend
@@ -68,7 +68,7 @@ async function fetchEvents() {
 	} catch (err) {
 		statusText.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500"></span> Error: ${err.message}`;
 		document.getElementById("eventGrid").innerHTML =
-			`<div class="col-span-full text-center py-20 text-red-500 font-medium border-2 border-dashed rounded-2xl">Make sure your backend is running at localhost:8000</div>`;
+			`<div class="col-span-full text-center py-20 text-red-500 font-medium border-2 border-dashed rounded-2xl">Make sure your backend is running</div>`;
 	}
 }
 

@@ -46,7 +46,7 @@ document.addEventListener("keydown", async (e) => {
 		if (eventId && (await confirmAndForceSync())) {
 			document.getElementById("loading").style.display = "";
 			try {
-				await fetch(`http://localhost:8000/participations/${eventId}/refresh`, {
+				await fetch(`/participations/${eventId}/refresh`, {
 					method: "GET",
 				});
 				showForceSyncMsg();
@@ -66,7 +66,7 @@ if (syncBtn) {
 				document.getElementById("loading").style.display = "";
 				try {
 					await fetch(
-						`http://localhost:8000/participations/${eventId}/refresh`,
+						`/participations/${eventId}/refresh`,
 						{ method: "GET" },
 					);
 					showForceSyncMsg();
@@ -97,7 +97,7 @@ async function fetchParticipations(eventId) {
 	document.getElementById("loading").style.display = "";
 	try {
 		const response = await fetch(
-			`http://localhost:8000/participations/${eventId}`,
+			`/participations/${eventId}`,
 		);
 		const data = await response.json();
 		renderTable(data);
@@ -286,11 +286,12 @@ async function collectAllTickets() {
 		'<span class="animate-spin mr-2"><i data-lucide="loader" class="w-4 h-4"></i></span> Collecting...';
 	try {
 		const response = await fetch(
-			`http://localhost:8000/event/${eventId}/collect-tickets`,
+			`/event/${eventId}/collect-tickets`,
 			{ method: "GET" },
 		);
 		if (response.ok) {
-			alert("Tickets collected successfully!");
+			// Sync data after collecting tickets
+			fetchParticipations(eventId);
 		} else {
 			alert("Failed to collect tickets.");
 		}
