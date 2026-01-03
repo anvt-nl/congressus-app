@@ -445,7 +445,14 @@ def get_participations(event_id: int, force_refresh: bool = False):
         participation["presence_count"] = participation_pressence
         participation["tickets"] = participation_tickets
     conn.close()
-    return participations
+
+    # Filter fields to reduce payload size
+    filtered_participations = []
+    allowed_fields = ["id", "member_id", "status", "addressee", "email", "presence_count", "tickets"]
+    for p in participations:
+        filtered_participations.append({k: p.get(k) for k in allowed_fields})
+
+    return filtered_participations
 
 
 def get_ticket(event_id: str, obj_id: str, refresh: bool = False):
