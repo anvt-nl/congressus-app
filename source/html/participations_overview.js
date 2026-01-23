@@ -196,10 +196,12 @@ function renderSubTable(title, rows) {
 	};
 	html += `<th class="px-2 py-2 text-left cursor-pointer select-none" onclick="sortTable('addressee')">Naam${arrow("addressee")}</th>`;
 	html += `<th class="px-2 py-2 text-left cursor-pointer select-none" onclick="sortTable('email')">Email${arrow("email")}</th>`;
-	if (!arguments[2]) html += `<th class="px-2 py-2 text-left">Status</th>`;
+	html += `<th class="px-2 py-2 text-left cursor-pointer select-none" onclick="sortTable('kenteken')">Kenteken${arrow("kenteken")}</th>`;
+	// Status-kolom nooit tonen
 	html += `<th class="px-2 py-2 text-left">Aanw.</th>`;
 	html += "</tr></thead><tbody>";
-	for (const p of rows) {
+	   for (const p of rows) {
+		   if (p.status === "unsubscribed") continue;
 		const ticketId = p.id || p.ticket_id || p.member_id || "";
 		const present =
 			typeof p.presence_count !== "undefined" && p.presence_count !== null
@@ -219,10 +221,10 @@ function renderSubTable(title, rows) {
 		const trOnClick = isApproved
 			? `onclick="window.location.href='ticket.html?event_id=${eventId}&ticket_id=${ticketId}'"`
 			: "";
-		html += `<tr class="${trClass}" ${trOnClick}>\n            <td class="px-2 py-2 truncate max-w-[120px]" title="${p.addressee}">${p.addressee || ""}</td>\n            <td class="px-2 py-2 truncate max-w-[120px]" title="${p.email}">${p.email || ""}</td>`;
-		if (!arguments[2])
-			html += `\n            <td class="px-2 py-2">${p.status || ""}</td>`;
-		html += `\n            <td class="px-2 py-2">${presenceStr}</td>\n        </tr>`;
+		   html += `<tr class="${trClass}" ${trOnClick}>\n            <td class="px-2 py-2 truncate max-w-[120px]" title="${p.addressee}">${p.addressee || ""}</td>\n            <td class="px-2 py-2 truncate max-w-[120px]" title="${p.email}">${p.email || ""}</td>`;
+		   html += `\n            <td class="px-2 py-2 truncate max-w-[120px]" title="${p.kenteken || ''}">${p.kenteken || ""}</td>`;
+		   // Status-cel nooit tonen
+		   html += `\n            <td class="px-2 py-2">${presenceStr}</td>\n        </tr>`;
 	}
 	html += "</tbody></table></div></div>";
 	return html;

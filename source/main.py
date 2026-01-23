@@ -70,12 +70,42 @@ WORKING_DIRECTORY = __file__.rsplit("/", 1)[0]
 
 # Get scriptname
 SCRIPT_NAME = __file__.rsplit("/", 1)[-1].split(".")[0]
+
+KENTEKENS_FILE = f"{WORKING_DIRECTORY}/kenteken.json"
 api_access_key = open(f"{WORKING_DIRECTORY}/{API_KEY_PATH}").read().strip()
 headers = {"Authorization": f"Bearer {api_access_key}"}
 
 app = fastapi.FastAPI()
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 HTTP_CLIENT = httpx.Client(headers=headers, timeout=10)
+
+# Read kentekens.json if exists
+if os.path.exists(KENTEKENS_FILE):
+    with open(KENTEKENS_FILE, "r", encoding="utf-8") as f:
+        kentekens = json.load(f)
+else:
+    kentekens = {}
+
+for kenteken_entry in kentekens.keys():
+    kenteken = kentekens[kenteken_entry].upper().replace(" ", "")
+    if '-' not in kenteken and len(kenteken) == 6:
+        # Spit kenteken when changeing from letters to digits
+        new_kenteken = ""
+        for i in range(len(kenteken)):
+            if i > 0 and kenteken[i].isalpha() != kenteken[i-1].isalpha():
+                new_kenteken += '-'
+            new_kenteken += kenteken[i]
+        kenteken = new_kenteken
+        if len(kenteken) == 7 and kenteken.count('-') == 1:
+            kenteken_split = kenteken.split('-')
+            if (len(kenteken_split[0]) == 2 and len(kenteken_split[1]) == 4):
+                kenteken_split[1] = kenteken_split[1][:2] + '-' + kenteken_split[1][2:]
+            elif (len(kenteken_split[0]) == 4 and len(kenteken_split[1]) == 2):
+                kenteken_split[0] = kenteken_split[0][:2] + '-' + kenteken_split[0][2:]
+            kenteken = kenteken_split[0] + '-' + kenteken_split[1]
+    kentekens[kenteken_entry] = kenteken
+print(f"Loaded {len(kentekens)} kentekens from {KENTEKENS_FILE}")
+print(json.dumps(kentekens, indent=2))
 
 def init_db():
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
@@ -496,11 +526,12 @@ def get_participations(event_id: int, force_refresh: bool = False):
                         participation_pressence += 1
         participation["presence_count"] = participation_pressence
         participation["tickets"] = participation_tickets
+        participation["kenteken"] = kentekens.get(str(participation.get("id")), "")
     conn.close()
 
     # Filter fields to reduce payload size
     filtered_participations = []
-    allowed_fields = ["id", "member_id", "status", "addressee", "email", "presence_count", "tickets"]
+    allowed_fields = ["id", "member_id", "status", "addressee", "email", "presence_count", "tickets", "kenteken"]
     for p in participations:
         filtered_participations.append({k: p.get(k) for k in allowed_fields})
 

@@ -11,7 +11,7 @@ working_directory = __file__.rsplit('/', 1)[0]
 # Get scriptname
 script_name = __file__.rsplit('/', 1)[-1].split('.')[0]
 
-api_access_key = open(f'{working_directory}/../api-key-2.txt').read().strip()
+api_access_key = open(f'{working_directory}/../source/api-key-2.txt').read().strip()
 
 # print(f"Using API key: #{api_access_key}#")
 
