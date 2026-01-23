@@ -20,12 +20,16 @@ async function confirmAndForceSync() {
 document.addEventListener("keydown", async (e) => {
 	if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "r") {
 		if (await confirmAndForceSync()) {
-			document.getElementById("api-status").innerHTML =
-				`<span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span> Force syncing...`;
 			try {
-				await fetch("/events/refresh", { method: "POST" });
-				showForceSyncMsg();
+				const resp = await fetch("/events/refresh");
+				const data = await resp.json();
+				if (data.status === "accepted") {
+					document.getElementById("api-status").innerHTML =
+						`<span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span> Syncing in background...`;
+					showForceSyncMsg();
+				}
 			} catch {}
+			// We don't wait for sync to finish, just reload cached data
 			fetchEvents();
 		}
 	}
@@ -37,11 +41,14 @@ const syncBtn = document.getElementById("syncBtn");
 syncBtn.addEventListener("touchstart", () => {
 	forceSyncTimeout = setTimeout(async () => {
 		if (await confirmAndForceSync()) {
-			document.getElementById("api-status").innerHTML =
-				`<span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span> Force syncing...`;
 			try {
-				await fetch("/events/refresh", { method: "POST" });
-				showForceSyncMsg();
+				const resp = await fetch("/events/refresh");
+				const data = await resp.json();
+				if (data.status === "accepted") {
+					document.getElementById("api-status").innerHTML =
+						`<span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span> Syncing in background...`;
+					showForceSyncMsg();
+				}
 			} catch {}
 			fetchEvents();
 		}

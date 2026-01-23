@@ -44,12 +44,12 @@ async function confirmAndForceSync() {
 document.addEventListener("keydown", async (e) => {
 	if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "r") {
 		if (eventId && (await confirmAndForceSync())) {
-			document.getElementById("loading").style.display = "";
 			try {
-				await fetch(`/participations/${eventId}/refresh`, {
-					method: "GET",
-				});
-				showForceSyncMsg();
+				const resp = await fetch(`/participations/${eventId}/refresh`);
+				const data = await resp.json();
+				if (data.status === "accepted") {
+					showForceSyncMsg();
+				}
 			} catch {}
 			fetchParticipations(eventId);
 		}
@@ -63,13 +63,12 @@ if (syncBtn) {
 	syncBtn.addEventListener("touchstart", () => {
 		forceSyncTimeout = setTimeout(async () => {
 			if (eventId && (await confirmAndForceSync())) {
-				document.getElementById("loading").style.display = "";
 				try {
-					await fetch(
-						`/participations/${eventId}/refresh`,
-						{ method: "GET" },
-					);
-					showForceSyncMsg();
+					const resp = await fetch(`/participations/${eventId}/refresh`);
+					const data = await resp.json();
+					if (data.status === "accepted") {
+						showForceSyncMsg();
+					}
 				} catch {}
 				fetchParticipations(eventId);
 			}
@@ -299,14 +298,22 @@ async function collectAllTickets() {
 		'<span class="animate-spin mr-2"><i data-lucide="loader" class="w-4 h-4"></i></span> Collecting...';
 	try {
 		const response = await fetch(
-			`/event/${eventId}/collect-tickets`,
-			{ method: "GET" },
+			`/event/${eventId}/collect-tickets`
 		);
-		if (response.ok) {
-			// Sync data after collecting tickets
+		const data = await response.json();
+		if (data.status === "accepted") {
+			// Show message that it's starting
+			const statusMsg = document.getElementById("forceSyncMsg");
+			statusMsg.textContent = "Collection started in background!";
+			statusMsg.classList.remove("hidden");
+			setTimeout(() => {
+				statusMsg.classList.add("hidden");
+				statusMsg.textContent = "Force sync complete!";
+			}, 3000);
+			// Show cached data immediately
 			fetchParticipations(eventId);
 		} else {
-			alert("Failed to collect tickets.");
+			alert("Failed to start collection: " + (data.message || "Unknown error"));
 		}
 	} catch (err) {
 		alert("Error contacting backend.");

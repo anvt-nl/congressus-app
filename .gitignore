@@ -1,8 +1,9 @@
 api-key*.txt
 *.json
-congressus_cache.db
+*.db
 .trunk
 __pycache__
 .vscode
 testing/*.txt
 source/venv
+source/.venv

@@ -55,6 +55,7 @@ from typing import Dict, List
 
 import httpx
 import fastapi
+from fastapi.middleware.gzip import GZipMiddleware
 # from fastapi import Request
 # from fastapi.responses import StreamingResponse
 
@@ -73,11 +74,14 @@ api_access_key = open(f"{WORKING_DIRECTORY}/{API_KEY_PATH}").read().strip()
 headers = {"Authorization": f"Bearer {api_access_key}"}
 
 app = fastapi.FastAPI()
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 HTTP_CLIENT = httpx.Client(headers=headers, timeout=10)
 
 def init_db():
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
+        # Enable WAL mode for better concurrency and performance
+        cursor.execute("PRAGMA journal_mode=WAL;")
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS events (
@@ -175,9 +179,10 @@ def read_events():
 
 
 @app.get("/events/refresh")
-def refresh_events():
-    log("Handling GET /events/refresh")
-    return get_events(force_refresh=True)
+def refresh_events(background_tasks: fastapi.BackgroundTasks):
+    log("Handling GET /events/refresh (Background)")
+    background_tasks.add_task(get_events, force_refresh=True)
+    return {"status": "accepted", "message": "Event refresh started in background"}
 
 
 @app.get("/event/{event_id}")
@@ -187,9 +192,10 @@ def read_event(event_id: str):
 
 
 @app.get("/event/{event_id}/collect-tickets")
-def collect_tickets(event_id: str):
-    log(f"Handling GET /event/{event_id}/collect-tickets")
-    return collect_tickets_for_event(event_id)
+def collect_tickets(event_id: str, background_tasks: fastapi.BackgroundTasks):
+    log(f"Handling GET /event/{event_id}/collect-tickets (Background)")
+    background_tasks.add_task(collect_tickets_for_event, event_id)
+    return {"status": "accepted", "message": "Ticket collection started in background"}
 
 
 @app.get("/participations/{event_id}")
@@ -199,9 +205,10 @@ def read_participations(event_id: str):
 
 
 @app.get("/participations/{event_id}/refresh")
-def refresh_participations(event_id: str):
-    log(f"Handling GET /participations/{event_id}/refresh")
-    return get_participations(event_id, force_refresh=True)
+def refresh_participations(event_id: str, background_tasks: fastapi.BackgroundTasks):
+    log(f"Handling GET /participations/{event_id}/refresh (Background)")
+    background_tasks.add_task(get_participations, event_id, force_refresh=True)
+    return {"status": "accepted", "message": "Participation refresh started in background"}
 
 
 @app.get("/ticket/{event_id}/{obj_id}")
@@ -301,17 +308,19 @@ def get_events(force_refresh: bool = False):
                 today_dt = datetime.strptime(today, "%Y-%m-%d")
                 present_leden = 0
                 present_vrijrijders = 0
+                
+                # Fetch participations from DB to calculate presence counts for all events
+                participations = get_participations(event["id"], force_refresh=False)
+                for participation in participations:
+                    if participation.get("presence_count", 0) > 0:
+                        if participation.get("member_id") is not None:
+                            present_leden += 1
+                        else:
+                            present_vrijrijders += 1
+                
                 if start_dt <= today_dt + timedelta(days=1):
-                    log(f"Event {event['id']} has started, is today, or is max 1 day in the future. Refreshing participations.")
-                    get_participations(event["id"], force_refresh=False)
-                    participations = get_participations(event["id"], force_refresh=False)
-                    for participation in participations:
-                        if participation.get("presence_count", 0) > 0:
-                            if participation.get("member_id") is not None:
-                                present_leden += 1
-                            else:
-                                present_vrijrijders += 1
-                    log(f"Event {event['id']} - Present Leden: {present_leden}, Present Vrijrijders: {present_vrijrijders}")
+                    log(f"Event {event['id']} is today or near. (Counts: L={present_leden}, V={present_vrijrijders})")
+                
                 events[index]["present_leden"] = present_leden
                 events[index]["present_vrijrijders"] = present_vrijrijders
     return filter_events(events)

@@ -12,7 +12,7 @@ script_name = __file__.rsplit('/', 1)[-1].split('.')[0]
 
 # print(f"Working directory: {working_directory}")
 
-api_access_key = open(f'{working_directory}/../api-key-2.txt').read().strip()
+api_access_key = open(f'{working_directory}/../source/api-key-2.txt').read().strip()
 
 # print(f"Using API key: #{api_access_key}#")
 
@@ -25,7 +25,7 @@ obj_id = sys.argv[2]
 
 
 headers = {'Authorization': f'Bearer {api_access_key}'}
-url = f'https://api.congressus.nl/v30/events/{event_id}/participations/{obj_id}'
+url = f'https://api.congressus.nl/v30/events/{event_id}/participations/{obj_id}?detailed=true'
 
 params = {}
 
