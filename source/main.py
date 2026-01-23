@@ -89,7 +89,7 @@ else:
 
 for kenteken_entry in kentekens.keys():
     kenteken = kentekens[kenteken_entry].upper().replace(" ", "")
-    if '-' not in kenteken and len(kenteken) == 6:
+    if '-' not in kenteken:
         # Spit kenteken when changeing from letters to digits
         new_kenteken = ""
         for i in range(len(kenteken)):
