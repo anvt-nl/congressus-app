@@ -78,7 +78,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 HTTP_CLIENT = httpx.Client(headers=headers, timeout=10)
 
 def init_db():
-    with sqlite3.connect(DB_PATH) as conn:
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
         cursor = conn.cursor()
         # Enable WAL mode for better concurrency and performance
         cursor.execute("PRAGMA journal_mode=WAL;")
@@ -230,10 +230,10 @@ def main():
 
 def get_events(force_refresh: bool = False):
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
         cursor = conn.cursor()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
         cursor = conn.cursor()
         
         # Table creation moved to init_db
@@ -327,7 +327,7 @@ def get_events(force_refresh: bool = False):
 
 
 def get_event(event_id: str):
-    with sqlite3.connect(DB_PATH) as conn:
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT data FROM events WHERE event_id = ?", (event_id,))
         row = cursor.fetchone()
@@ -337,7 +337,7 @@ def get_event(event_id: str):
 
 
 def filter_events(events_list: List[Dict]) -> List[Dict]:
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     cursor = conn.cursor()
     return_events = []
     for event in events_list:
@@ -386,7 +386,7 @@ def filter_events(events_list: List[Dict]) -> List[Dict]:
 
 
 def get_participations(event_id: int, force_refresh: bool = False):
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     cursor = conn.cursor()
 
     # Fetch all participations from sqlite
@@ -508,7 +508,7 @@ def get_participations(event_id: int, force_refresh: bool = False):
 
 
 def get_ticket(event_id: str, obj_id: str, refresh: bool = False):
-    with sqlite3.connect(DB_PATH) as conn:
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
         cursor = conn.cursor()
 
 
@@ -580,7 +580,7 @@ def filter_tickets(tickets_list: Dict) -> Dict:
 
 def do_update_ticket(event_id: str, obj_id: str, new_status: str):
     log(f"New status: {new_status}")
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     cursor = conn.cursor()
 
     cursor.execute(

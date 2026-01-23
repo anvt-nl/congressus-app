@@ -31,7 +31,18 @@ spec:
             drop:
               - ALL
         ports:
-        - containerPort: 8000
+          - containerPort: 8000
+        args:
+          - "python"
+          - "-m"
+          - "uvicorn"
+          - "main:app"
+          - "--host"
+          - "0.0.0.0"
+          - "--port"
+          - "8000"
+          - "--workers"
+          - "4"
         resources:
           requests:
             memory: "256Mi"
@@ -40,8 +51,8 @@ spec:
             memory: "512Mi"
             cpu: "500m"
         env:
-        - name: CONGRESSUS_CACHE_DB
-          value: /db/congressus-cache.db
+          - name: CONGRESSUS_CACHE_DB
+            value: /db/congressus-cache.db
         livenessProbe:
           httpGet:
             path: /
@@ -59,19 +70,19 @@ spec:
           timeoutSeconds: 2
           failureThreshold: 3
         volumeMounts:
-        - name: congressus-cache
-          mountPath: /db
-        - name: congressus-api-key
-          mountPath: /app/api-key-2.txt
-          subPath: api-key-2.txt
-          readOnly: true
+          - name: congressus-cache
+            mountPath: /db
+          - name: congressus-api-key
+            mountPath: /app/api-key-2.txt
+            subPath: api-key-2.txt
+            readOnly: true
       volumes:
-      - name: congressus-cache
-        persistentVolumeClaim:
-          claimName: congressus-cache
-      - name: congressus-api-key
-        secret:
-          secretName: congressus-api
-          items:
-            - key: api-key
-              path: api-key-2.txt
+        - name: congressus-cache
+          persistentVolumeClaim:
+            claimName: congressus-cache
+        - name: congressus-api-key
+          secret:
+            secretName: congressus-api
+            items:
+              - key: api-key
+                path: api-key-2.txt
