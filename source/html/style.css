@@ -1,1 +1,16 @@
 /* Place for custom styles if needed. Currently using TailwindCSS for all styling. */
+
+/* QR Scanner Styles */
+#reader {
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+#reader__scan_region {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+#reader__dashboard_section {
+  display: none !important;
+}
