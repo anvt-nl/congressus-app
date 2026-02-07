@@ -122,3 +122,29 @@ jobs:
           name: sbom-cyclonedx-${{ needs.create_tag.outputs.new_tag }}
           path: sbom.json
           retention-days: 90 # Keep release SBOMs longer
+
+  # JOB 3: Update Kubernetes Manifest with new version
+  update_manifest:
+    needs: [create_tag, build_publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Update image version in manifest
+        run: |
+          NEW_TAG="${{ needs.create_tag.outputs.new_tag }}"
+          # Use sed to update the image tag.
+          # Matches 'image: ghcr.io/<owner>/<repo>:<version>'
+          sed -i "s|image: ghcr.io/${{ github.repository_owner }}/congressus-app:.*|image: ghcr.io/${{ github.repository_owner }}/congressus-app:${NEW_TAG}|" k8s-manifests/deployment.yaml k8s-manifests/dev/deployment.yaml
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add k8s-manifests/deployment.yaml k8s-manifests/dev/deployment.yaml
+          git commit -m "chore: update image version to ${{ needs.create_tag.outputs.new_tag }} [skip ci]"
+          git push
