@@ -1,9 +1,11 @@
 api-key*.txt
 *.json
 *.db
+*.png
 .trunk
 __pycache__
 .vscode
 testing/*.txt
 source/venv
 source/.venv
+testing/.venv

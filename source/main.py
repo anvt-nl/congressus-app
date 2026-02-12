@@ -52,13 +52,14 @@ import time
 from datetime import datetime, timedelta
 from typing import Dict, List
 
-
-import httpx
 import fastapi
+import httpx
+import pandas as pd
+from fastapi import File, UploadFile
 from fastapi.middleware.gzip import GZipMiddleware
+
 # from fastapi import Request
 # from fastapi.responses import StreamingResponse
-
 
 API_URL = "https://api.congressus.nl/v30"
 API_KEY_PATH = "api-key-2.txt"
@@ -79,7 +80,32 @@ app = fastapi.FastAPI()
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 HTTP_CLIENT = httpx.Client(headers=headers, timeout=10)
 
-# Read kentekens.json if exists
+
+def normalize_kenteken(kenteken: str) -> str:
+    """
+    Normalize a Dutch license plate (kenteken) to standard format.
+    Example: "AB12CD" -> "AB-12-CD"
+    """
+    kenteken = kenteken.upper().replace(" ", "")
+    if "-" not in kenteken:
+        # Split kenteken when changing from letters to digits
+        new_kenteken = ""
+        for i in range(len(kenteken)):
+            if i > 0 and kenteken[i].isalpha() != kenteken[i - 1].isalpha():
+                new_kenteken += "-"
+            new_kenteken += kenteken[i]
+        kenteken = new_kenteken
+        if len(kenteken) == 7 and kenteken.count("-") == 1:
+            kenteken_split = kenteken.split("-")
+            if len(kenteken_split[0]) == 2 and len(kenteken_split[1]) == 4:
+                kenteken_split[1] = kenteken_split[1][:2] + "-" + kenteken_split[1][2:]
+            elif len(kenteken_split[0]) == 4 and len(kenteken_split[1]) == 2:
+                kenteken_split[0] = kenteken_split[0][:2] + "-" + kenteken_split[0][2:]
+            kenteken = kenteken_split[0] + "-" + kenteken_split[1]
+    return kenteken
+
+
+# Read kentekens.json if exists and normalize
 if os.path.exists(KENTEKENS_FILE):
     with open(KENTEKENS_FILE, "r", encoding="utf-8") as f:
         kentekens = json.load(f)
@@ -88,25 +114,10 @@ else:
     kentekens = {}
 
 for kenteken_entry in kentekens.keys():
-    kenteken = kentekens[kenteken_entry].upper().replace(" ", "")
-    if '-' not in kenteken:
-        # Spit kenteken when changeing from letters to digits
-        new_kenteken = ""
-        for i in range(len(kenteken)):
-            if i > 0 and kenteken[i].isalpha() != kenteken[i-1].isalpha():
-                new_kenteken += '-'
-            new_kenteken += kenteken[i]
-        kenteken = new_kenteken
-        if len(kenteken) == 7 and kenteken.count('-') == 1:
-            kenteken_split = kenteken.split('-')
-            if (len(kenteken_split[0]) == 2 and len(kenteken_split[1]) == 4):
-                kenteken_split[1] = kenteken_split[1][:2] + '-' + kenteken_split[1][2:]
-            elif (len(kenteken_split[0]) == 4 and len(kenteken_split[1]) == 2):
-                kenteken_split[0] = kenteken_split[0][:2] + '-' + kenteken_split[0][2:]
-            kenteken = kenteken_split[0] + '-' + kenteken_split[1]
-    kentekens[kenteken_entry] = kenteken
+    kentekens[kenteken_entry] = normalize_kenteken(kentekens[kenteken_entry])
 print(f"Loaded {len(kentekens)} kentekens from {KENTEKENS_FILE}")
 print(json.dumps(kentekens, indent=2))
+
 
 def init_db():
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
@@ -132,7 +143,9 @@ def init_db():
             )
         """
         )
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_participations_event_id ON participations(event_id)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_participations_event_id ON participations(event_id)"
+        )
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS tickets (
@@ -143,28 +156,38 @@ def init_db():
             )
         """
         )
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tickets_event_id ON tickets(event_id)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tickets_event_id ON tickets(event_id)"
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS kentekens (
+                id TEXT PRIMARY KEY,
+                kenteken TEXT
+            )
+        """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS apk_status (
+                kenteken TEXT PRIMARY KEY,
+                vervaldatum_apk TEXT,
+                checked_at TEXT,
+                merk TEXT,
+                handelsbenaming TEXT
+            )
+        """
+        )
         conn.commit()
+
 
 # Initialize DB on startup
 init_db()
 
+
 # Expose via FastAPI
 @app.get("/")
 # ... (rest of the code) ...
-
-# In get_events:
-# Remove CREATE TABLE
-
-# In get_participations:
-# Remove CREATE TABLE
-
-# In get_ticket:
-# Remove CREATE TABLE
-
-# In functions using httpx.get or httpx.post, use HTTP_CLIENT.get/post without passing headers/timeout repeatedly if they are standard. 
-# But wait, some requests might need different params.
-# HTTP_CLIENT has base headers.
 
 
 @app.get("/")
@@ -203,6 +226,7 @@ async def html_page(page_name: str) -> fastapi.responses.HTMLResponse:
         return fastapi.responses.HTMLResponse(status_code=200, content=content)
     return fastapi.responses.Response(status_code=404, content="Page not found")
 
+
 @app.get("/events")
 def read_events():
     log("Handling GET /events")
@@ -239,19 +263,200 @@ def read_participations(event_id: str):
 def refresh_participations(event_id: str, background_tasks: fastapi.BackgroundTasks):
     log(f"Handling GET /participations/{event_id}/refresh (Background)")
     background_tasks.add_task(get_participations, event_id, force_refresh=True)
-    return {"status": "accepted", "message": "Participation refresh started in background"}
+    return {
+        "status": "accepted",
+        "message": "Participation refresh started in background",
+    }
 
 
 @app.get("/ticket/{event_id}/{obj_id}")
 def read_ticket(event_id: str, obj_id: str):
     log(f"Handling GET /ticket/{event_id}/{obj_id}")
-    return get_ticket(event_id, obj_id)
+    ticket_data = get_ticket(event_id, obj_id)
+
+    # Add APK data if kenteken exists
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
+        # Get kenteken for this participation
+        cursor.execute("SELECT kenteken FROM kentekens WHERE id = ?", (obj_id,))
+        kenteken_row = cursor.fetchone()
+
+        if kenteken_row:
+            kenteken = kenteken_row[0]
+            ticket_data["kenteken"] = kenteken
+
+            # Get APK status
+            cursor.execute(
+                "SELECT vervaldatum_apk, checked_at, merk, handelsbenaming FROM apk_status WHERE kenteken = ?",
+                (kenteken,),
+            )
+            apk_row = cursor.fetchone()
+
+            if apk_row:
+                ticket_data["apk_status"] = {
+                    "vervaldatum_apk": apk_row[0],
+                    "checked_at": apk_row[1],
+                    "merk": apk_row[2],
+                    "handelsbenaming": apk_row[3],
+                }
+
+    return ticket_data
 
 
 @app.get("/ticket/{event_id}/{obj_id}/{new_status}")
 def update_ticket(event_id: str, obj_id: str, new_status: str):
     log(f"Handling GET /ticket/{event_id}/{obj_id}/{new_status}")
     return do_update_ticket(event_id, obj_id, new_status)
+
+
+@app.post("/upload-kenteken")
+async def upload_kenteken(file: UploadFile = File(...)):
+    """
+    Upload an Excel file containing kenteken (license plate) data.
+    Expected columns: 'Deelname-ID' and 'Kenteken' in sheet 'Deelnemers'
+    Returns: JSON with added, duplicates, total, and errors counts
+    """
+    log(f"Handling POST /upload-kenteken with file: {file.filename}")
+
+    # Validate file type
+    if not file.filename.endswith((".xlsx", ".xls")):
+        return {
+            "status": "error",
+            "message": "Invalid file type. Please upload an Excel file (.xlsx or .xls)",
+        }
+
+    try:
+        # Read Excel file
+        contents = await file.read()
+        df = pd.read_excel(contents, sheet_name="Deelnemers")
+
+        # Validate required columns
+        if "Deelname-ID" not in df.columns or (
+            "Kenteken" not in df.columns and "Kenteken:" not in df.columns
+        ):
+            return {
+                "status": "error",
+                "message": "Missing required columns. Expected 'Deelname-ID' and 'Kenteken' columns in 'Deelnemers' sheet",
+            }
+
+        added = 0
+        duplicates = 0
+        errors = []
+
+        with sqlite3.connect(DB_PATH, timeout=30) as conn:
+            cursor = conn.cursor()
+
+            for _, row in df.iterrows():
+                try:
+                    deelname_id = row["Deelname-ID"]
+                    if pd.isna(deelname_id):
+                        continue
+
+                    deelname_id = str(int(deelname_id))
+
+                    # Get kenteken from either "Kenteken" or "Kenteken:" column
+                    kenteken = row.get("Kenteken")
+                    if pd.isna(kenteken):
+                        kenteken = row.get("Kenteken:")
+
+                    if pd.isna(kenteken):
+                        continue
+
+                    # Normalize kenteken
+                    kenteken = normalize_kenteken(str(kenteken))
+
+                    # Check if already exists
+                    cursor.execute(
+                        "SELECT id FROM kentekens WHERE id = ?", (deelname_id,)
+                    )
+                    if cursor.fetchone():
+                        duplicates += 1
+                    else:
+                        cursor.execute(
+                            "INSERT INTO kentekens (id, kenteken) VALUES (?, ?)",
+                            (deelname_id, kenteken),
+                        )
+                        added += 1
+                except Exception as e:
+                    errors.append(f"Row error: {str(e)}")
+
+            conn.commit()
+
+        log(f"Upload complete: {added} added, {duplicates} duplicates")
+        return {
+            "status": "success",
+            "added": added,
+            "duplicates": duplicates,
+            "total": added + duplicates,
+            "errors": errors,
+        }
+
+    except Exception as e:
+        log(f"Error processing file: {str(e)}")
+        return {"status": "error", "message": f"Error processing file: {str(e)}"}
+
+
+@app.get("/kentekens")
+def get_kentekens():
+    """
+    Get all kentekens from the database
+    """
+    log("Handling GET /kentekens")
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, kenteken FROM kentekens")
+        results = [{"id": row[0], "kenteken": row[1]} for row in cursor.fetchall()]
+    return results
+
+
+@app.post("/check-apk/{event_id}")
+def check_apk_status(event_id: str, background_tasks: fastapi.BackgroundTasks):
+    """
+    Check APK status for all valid Dutch license plates for an event.
+    Runs as background task.
+    """
+    log(f"Handling POST /check-apk/{event_id}")
+    background_tasks.add_task(do_check_apk_status, event_id)
+    return {"status": "accepted", "message": "APK status check started in background"}
+
+
+@app.get("/apk-status/{event_id}")
+def get_apk_status(event_id: str):
+    """
+    Get APK status for all kentekens associated with an event
+    """
+    log(f"Handling GET /apk-status/{event_id}")
+
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
+
+        # Get all kentekens for participations in this event
+        cursor.execute(
+            """
+            SELECT k.id, k.kenteken, a.vervaldatum_apk, a.checked_at, a.merk, a.handelsbenaming
+            FROM kentekens k
+            LEFT JOIN apk_status a ON k.kenteken = a.kenteken
+            WHERE k.id IN (
+                SELECT participation_id FROM participations WHERE event_id = ?
+            )
+        """,
+            (event_id,),
+        )
+
+        results = []
+        for row in cursor.fetchall():
+            results.append(
+                {
+                    "participation_id": row[0],
+                    "kenteken": row[1],
+                    "vervaldatum_apk": row[2],
+                    "checked_at": row[3],
+                    "merk": row[4],
+                    "handelsbenaming": row[5],
+                }
+            )
+
+    return results
 
 
 def main():
@@ -266,7 +471,7 @@ def get_events(force_refresh: bool = False):
 
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
         cursor = conn.cursor()
-        
+
         # Table creation moved to init_db
 
         # fetch all events from sqlite
@@ -333,13 +538,13 @@ def get_events(force_refresh: bool = False):
             for index, event in enumerate(events):
                 start = event["start"]
                 # Check if date start is max 1 day in the future, current day, or in the past
-                log (start)
+                log(start)
                 today = time.strftime("%Y-%m-%d")
                 start_dt = datetime.strptime(start, "%Y-%m-%dT%H:%M:%S")
                 today_dt = datetime.strptime(today, "%Y-%m-%d")
                 present_leden = 0
                 present_vrijrijders = 0
-                
+
                 # Fetch participations from DB to calculate presence counts for all events
                 participations = get_participations(event["id"], force_refresh=False)
                 for participation in participations:
@@ -348,10 +553,12 @@ def get_events(force_refresh: bool = False):
                             present_leden += 1
                         else:
                             present_vrijrijders += 1
-                
+
                 if start_dt <= today_dt + timedelta(days=1):
-                    log(f"Event {event['id']} is today or near. (Counts: L={present_leden}, V={present_vrijrijders})")
-                
+                    log(
+                        f"Event {event['id']} is today or near. (Counts: L={present_leden}, V={present_vrijrijders})"
+                    )
+
                 events[index]["present_leden"] = present_leden
                 events[index]["present_vrijrijders"] = present_vrijrijders
     return filter_events(events)
@@ -506,7 +713,9 @@ def get_participations(event_id: int, force_refresh: bool = False):
             (event_id,),
         ):
             participations.append(json.loads(row[1]))
-        log(f"Fetched {len(participations)} participations from DB for event {event_id}.")
+        log(
+            f"Fetched {len(participations)} participations from DB for event {event_id}."
+        )
 
     try:
         cursor.execute("SELECT data FROM tickets WHERE event_id = ?", (event_id,))
@@ -516,6 +725,11 @@ def get_participations(event_id: int, force_refresh: bool = False):
     else:
         tickets = [json.loads(row[0]) for row in cursor.fetchall()]
     log(f"Fetched {len(tickets)} tickets from DB for event {event_id}.")
+
+    # Fetch kentekens from database
+    cursor.execute("SELECT id, kenteken FROM kentekens")
+    kentekens_db = {row[0]: row[1] for row in cursor.fetchall()}
+
     for participation in participations:
         participation_pressence = 0
         participation_tickets = None
@@ -527,12 +741,21 @@ def get_participations(event_id: int, force_refresh: bool = False):
                         participation_pressence += 1
         participation["presence_count"] = participation_pressence
         participation["tickets"] = participation_tickets
-        participation["kenteken"] = kentekens.get(str(participation.get("id")), "")
+        participation["kenteken"] = kentekens_db.get(str(participation.get("id")), "")
     conn.close()
 
     # Filter fields to reduce payload size
     filtered_participations = []
-    allowed_fields = ["id", "member_id", "status", "addressee", "email", "presence_count", "tickets", "kenteken"]
+    allowed_fields = [
+        "id",
+        "member_id",
+        "status",
+        "addressee",
+        "email",
+        "presence_count",
+        "tickets",
+        "kenteken",
+    ]
     for p in participations:
         filtered_participations.append({k: p.get(k) for k in allowed_fields})
 
@@ -543,9 +766,9 @@ def get_ticket(event_id: str, obj_id: str, refresh: bool = False):
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
         cursor = conn.cursor()
 
-
         cursor.execute(
-            "SELECT data, last_updated FROM tickets WHERE obj_id = ? AND event_id = ?", (obj_id, event_id)
+            "SELECT data, last_updated FROM tickets WHERE obj_id = ? AND event_id = ?",
+            (obj_id, event_id),
         )
 
         # Test the number of rows returned
@@ -561,7 +784,7 @@ def get_ticket(event_id: str, obj_id: str, refresh: bool = False):
             log(f"Object last updated at {last_updated}")
         if refresh:
             log(f"Fetching object {obj_id} for event {event_id} from API...")
-                
+
             # https://api.congressus.nl/v30/events/{event_id}/participations/{obj_id}'
             url = f"{API_URL}/events/{event_id}/participations/{obj_id}"
             resp = HTTP_CLIENT.get(url)
@@ -594,10 +817,10 @@ def filter_tickets(tickets_list: Dict) -> Dict:
                 "status_presence": ticket.get("status_presence", ""),
                 "ticket_type": ticket.get("ticket_type", {}).get("name", ""),
                 "price": ticket.get("ticket_type", {}).get("price", 0),
-                "id": ticket.get("id", "")
+                "id": ticket.get("id", ""),
             }
         )
-        
+
     return_list = {
         "id": tickets_list.get("id", ""),
         "addressee": tickets_list.get("addressee", ""),
@@ -605,7 +828,7 @@ def filter_tickets(tickets_list: Dict) -> Dict:
         "event_name": tickets_list.get("event", "").get("name", ""),
         "event_date": tickets_list.get("event", "").get("start", ""),
         "status": tickets_list.get("status", ""),
-        "tickets": tickets
+        "tickets": tickets,
     }
     return return_list
 
@@ -619,20 +842,25 @@ def do_update_ticket(event_id: str, obj_id: str, new_status: str):
         """
         SELECT data FROM tickets WHERE obj_id = ? AND event_id = ?
     """,
-        (obj_id, event_id)
+        (obj_id, event_id),
     )
 
     row = cursor.fetchone()
     if not row:
         conn.close()
         return {"status": "error", "message": f"Ticket {obj_id} not found."}
-    
+
     json_data = json.loads(row[0])
     for ticket in json_data.get("tickets", []):
         if ticket["status_presence"] == new_status:
-            log(f"Ticket {ticket['id']} already has status_presence {new_status}. No update needed.")
-            return {"status": "success", "message": f"Ticket {obj_id} already has status_presence {new_status}."}
-    
+            log(
+                f"Ticket {ticket['id']} already has status_presence {new_status}. No update needed."
+            )
+            return {
+                "status": "success",
+                "message": f"Ticket {obj_id} already has status_presence {new_status}.",
+            }
+
     # https://api.congressus.nl/v30/events/{event_id}/participations/{obj_id}/set-presence
     url = f"{API_URL}/events/{event_id}/participations/{obj_id}/set-presence"
     log(f"Updating ticket {obj_id} to status_presence {new_status}...")
@@ -644,7 +872,7 @@ def do_update_ticket(event_id: str, obj_id: str, new_status: str):
     if resp.status_code != 204:
         log(f"Failed to update ticket {obj_id}. Status code: {resp.status_code}")
         return {"status": "error", "message": f"Failed to update ticket {obj_id}."}
-    
+
     log(f"Ticket {obj_id} updated successfully in API. Updating local DB...")
     return get_ticket(event_id, obj_id, refresh=True)
 
@@ -663,17 +891,27 @@ def collect_tickets_for_event(event_id: str):
         obj_id = participation["id"]
         ticket_data = get_ticket(event_id, obj_id, refresh=False)
         # Skip if already present
-        if ticket_data.get("tickets") is not None and len(ticket_data.get("tickets")) > 0 and ticket_data["tickets"][0].get("status_presence") is not None and ticket_data["tickets"][0]["status_presence"] == "present":
-            log(f"Ticket data for participation {obj_id} already exists and is present. Skipping refresh.")
+        if (
+            ticket_data.get("tickets") is not None
+            and len(ticket_data.get("tickets")) > 0
+            and ticket_data["tickets"][0].get("status_presence") is not None
+            and ticket_data["tickets"][0]["status_presence"] == "present"
+        ):
+            log(
+                f"Ticket data for participation {obj_id} already exists and is present. Skipping refresh."
+            )
             continue
         to_update.append(obj_id)
 
     log(f"Found {len(to_update)} participations needing ticket update.")
-    
+
     refreshed_count = 0
     # Use ThreadPoolExecutor to fetch tickets concurrently
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        future_to_obj_id = {executor.submit(get_ticket, event_id, obj_id, refresh=True): obj_id for obj_id in to_update}
+        future_to_obj_id = {
+            executor.submit(get_ticket, event_id, obj_id, refresh=True): obj_id
+            for obj_id in to_update
+        }
         for future in concurrent.futures.as_completed(future_to_obj_id):
             obj_id = future_to_obj_id[future]
             try:
@@ -684,8 +922,117 @@ def collect_tickets_for_event(event_id: str):
             except Exception as exc:
                 log(f"Generated an exception for {obj_id}: {exc}")
 
-    log(f"Refreshed ticket data for {refreshed_count} participations for event {event_id}.")
+    log(
+        f"Refreshed ticket data for {refreshed_count} participations for event {event_id}."
+    )
     return {"status": "success", "message": f"Collected tickets for event {event_id}."}
+
+
+def do_check_apk_status(event_id: str):
+    """
+    Background task to check APK status for all kentekens in an event.
+    Only checks kentekens with expired or unknown APK status.
+    """
+    log(f"Starting APK check for event {event_id}")
+
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
+
+        # Get all kentekens for this event with their current APK status
+        cursor.execute(
+            """
+            SELECT DISTINCT k.kenteken, a.vervaldatum_apk
+            FROM kentekens k
+            LEFT JOIN apk_status a ON k.kenteken = a.kenteken
+            WHERE k.id IN (
+                SELECT participation_id FROM participations WHERE event_id = ?
+            )
+        """,
+            (event_id,),
+        )
+
+        kenteken_data = cursor.fetchall()
+        log(f"Found {len(kenteken_data)} kentekens for event {event_id}")
+
+        # Filter for kentekens that need checking:
+        # 1. Valid Dutch plates (8 chars with 2 dashes)
+        # 2. Either no APK data OR expired APK
+        kentekens_to_check = []
+        today = time.strftime("%Y%m%d")
+
+        for kenteken, vervaldatum_apk in kenteken_data:
+            # Skip if not valid Dutch format
+            if len(kenteken) != 8 or kenteken.count("-") != 2:
+                continue
+
+            # Check if we need to query this kenteken
+            if not vervaldatum_apk:
+                # No APK data - need to check
+                kentekens_to_check.append(kenteken)
+            elif vervaldatum_apk < today:
+                # APK expired - need to recheck
+                kentekens_to_check.append(kenteken)
+            # else: APK is still valid, skip
+
+        log(
+            f"Filtered to {len(kentekens_to_check)} kentekens needing APK check (expired or unknown)"
+        )
+
+        checked = 0
+        errors = 0
+        skipped = len(kenteken_data) - len(kentekens_to_check)
+
+        for kenteken in kentekens_to_check:
+            try:
+                # Remove dashes for API call
+                kenteken_no_dash = kenteken.replace("-", "")
+
+                # Query RDW API
+                url = f"https://opendata.rdw.nl/resource/m9d7-ebf2.json?kenteken={kenteken_no_dash}"
+                resp = HTTP_CLIENT.get(url)
+                resp.raise_for_status()
+
+                data = resp.json()
+
+                if data and len(data) > 0:
+                    vehicle = data[0]
+                    vervaldatum_apk = vehicle.get("vervaldatum_apk", None)
+                    merk = vehicle.get("merk", None)
+                    handelsbenaming = vehicle.get("handelsbenaming", None)
+
+                    # Store in database
+                    cursor.execute(
+                        """
+                        INSERT OR REPLACE INTO apk_status 
+                        (kenteken, vervaldatum_apk, checked_at, merk, handelsbenaming)
+                        VALUES (?, ?, ?, ?, ?)
+                    """,
+                        (
+                            kenteken,
+                            vervaldatum_apk,
+                            time.strftime("%Y-%m-%d %H:%M:%S"),
+                            merk,
+                            handelsbenaming,
+                        ),
+                    )
+                    conn.commit()
+                    checked += 1
+
+                    if checked % 5 == 0:
+                        log(f"Progress: {checked}/{len(kentekens_to_check)} checked")
+                else:
+                    log(f"No data found for kenteken {kenteken}")
+                    errors += 1
+
+            except Exception as e:
+                log(f"Error checking kenteken {kenteken}: {str(e)}")
+                errors += 1
+
+        log(
+            f"APK check complete for event {event_id}: {checked} checked, {skipped} skipped (valid APK), {errors} errors"
+        )
+
+    return {"checked": checked, "skipped": skipped, "errors": errors}
 
 
 def log(message: str = ""):

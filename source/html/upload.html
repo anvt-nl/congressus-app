@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="nl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Upload Kenteken Excel | ANVT</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="bg-slate-50 min-h-screen pb-20">
+    <div class="max-w-4xl mx-auto px-4 py-10">
+      <header class="mb-10">
+        <div class="flex items-center gap-4 mb-4">
+          <a
+            href="index.html"
+            class="text-slate-600 hover:text-slate-900 transition"
+          >
+            <i data-lucide="arrow-left" class="w-6 h-6"></i>
+          </a>
+          <div>
+            <h1 class="text-3xl font-black text-slate-900 tracking-tight">
+              Kenteken Upload
+            </h1>
+            <p class="text-sm text-slate-500">
+              Upload Excel bestand met kenteken gegevens
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+        <!-- Upload Form -->
+        <div id="uploadForm" class="space-y-6">
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-2">
+              Selecteer Excel bestand
+            </label>
+            <div
+              class="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center hover:border-blue-400 transition"
+            >
+              <input
+                type="file"
+                id="fileInput"
+                accept=".xlsx,.xls"
+                class="hidden"
+              />
+              <label for="fileInput" class="cursor-pointer">
+                <div class="flex flex-col items-center gap-3">
+                  <div class="bg-blue-50 p-4 rounded-full">
+                    <i data-lucide="upload" class="w-8 h-8 text-blue-600"></i>
+                  </div>
+                  <div>
+                    <p class="text-sm font-medium text-slate-900">
+                      Klik om bestand te selecteren
+                    </p>
+                    <p class="text-xs text-slate-500 mt-1">
+                      Excel formaat (.xlsx, .xls)
+                    </p>
+                  </div>
+                </div>
+              </label>
+            </div>
+            <p id="fileName" class="text-sm text-slate-600 mt-2 hidden"></p>
+          </div>
+
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div class="flex gap-3">
+              <i
+                data-lucide="info"
+                class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5"
+              ></i>
+              <div class="text-sm text-blue-900">
+                <p class="font-semibold mb-1">Verwachte structuur:</p>
+                <ul class="list-disc list-inside space-y-1 text-blue-800">
+                  <li>Sheet naam: <strong>Deelnemers</strong></li>
+                  <li>
+                    Kolommen: <strong>Deelname-ID</strong> en
+                    <strong>Kenteken</strong>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <button
+            id="uploadBtn"
+            onclick="uploadFile()"
+            class="w-full bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled
+          >
+            <i data-lucide="upload-cloud" class="w-5 h-5"></i>
+            Upload Bestand
+          </button>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loadingState" class="hidden text-center py-12">
+          <div class="animate-spin mb-4 inline-block">
+            <i data-lucide="loader-2" class="w-12 h-12 text-blue-600"></i>
+          </div>
+          <p class="text-slate-600 font-medium">Bestand wordt verwerkt...</p>
+        </div>
+
+        <!-- Results -->
+        <div id="resultsSection" class="hidden space-y-6">
+          <div class="flex items-center justify-between pb-4 border-b">
+            <h2 class="text-xl font-bold text-slate-900">Upload Resultaat</h2>
+            <button
+              onclick="resetForm()"
+              class="text-sm text-blue-600 hover:text-blue-700 font-medium"
+            >
+              Nieuw bestand uploaden
+            </button>
+          </div>
+
+          <!-- Success State -->
+          <div id="successResults" class="hidden space-y-4">
+            <div
+              class="flex items-center gap-3 text-green-700 bg-green-50 border border-green-200 rounded-lg p-4"
+            >
+              <i data-lucide="check-circle" class="w-6 h-6 flex-shrink-0"></i>
+              <div>
+                <p class="font-semibold">Upload succesvol!</p>
+                <p class="text-sm text-green-600">Het bestand is verwerkt.</p>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4">
+              <div
+                class="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center"
+              >
+                <p class="text-3xl font-black text-blue-600" id="totalCount">
+                  0
+                </p>
+                <p class="text-sm text-blue-800 font-medium mt-1">
+                  Totaal verwerkt
+                </p>
+              </div>
+              <div
+                class="bg-green-50 border border-green-200 rounded-lg p-4 text-center"
+              >
+                <p class="text-3xl font-black text-green-600" id="addedCount">
+                  0
+                </p>
+                <p class="text-sm text-green-800 font-medium mt-1">
+                  Nieuw toegevoegd
+                </p>
+              </div>
+              <div
+                class="bg-amber-50 border border-amber-200 rounded-lg p-4 text-center"
+              >
+                <p
+                  class="text-3xl font-black text-amber-600"
+                  id="duplicatesCount"
+                >
+                  0
+                </p>
+                <p class="text-sm text-amber-800 font-medium mt-1">
+                  Duplicaten
+                </p>
+              </div>
+            </div>
+
+            <div id="errorsSection" class="hidden">
+              <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                <p class="font-semibold text-red-900 mb-2">Waarschuwingen:</p>
+                <ul
+                  id="errorsList"
+                  class="text-sm text-red-800 space-y-1 list-disc list-inside"
+                ></ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Error State -->
+          <div id="errorResults" class="hidden">
+            <div
+              class="flex items-start gap-3 text-red-700 bg-red-50 border border-red-200 rounded-lg p-4"
+            >
+              <i
+                data-lucide="alert-circle"
+                class="w-6 h-6 flex-shrink-0 mt-0.5"
+              ></i>
+              <div>
+                <p class="font-semibold">Fout bij verwerken</p>
+                <p class="text-sm text-red-600 mt-1" id="errorMessage"></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="upload.js"></script>
+  </body>
+</html>
