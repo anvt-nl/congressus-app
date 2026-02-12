@@ -60,7 +60,7 @@ async function fetchTicketDetails() {
     if (data.kenteken || data.apk_status) {
       const apkData = data.apk_status || {};
       let apkStatusText = "-";
-      let apkClass = "text-slate-400";
+      let boxClass = "bg-slate-50"; // Default background
 
       if (apkData.vervaldatum_apk) {
         // Parse date (format: YYYYMMDD)
@@ -74,23 +74,21 @@ async function fetchTicketDetails() {
         // Format as DD-MM-YYYY
         apkStatusText = `${day}-${month}-${year}`;
 
-        // Color code based on days until expiration
+        // Color code background based on days until expiration
         if (daysDiff < 0) {
-          apkClass = "text-red-600 font-bold"; // Expired
-        } else if (daysDiff < 30) {
-          apkClass = "text-yellow-600 font-bold"; // Expiring soon
+          boxClass = "bg-red-100"; // Expired - light red background
         } else {
-          apkClass = "text-green-600"; // Valid
+          boxClass = "bg-green-100"; // Valid (or expiring soon) - light green background
         }
       }
 
       vehicleInfo = `<div class="mt-4 pt-4 border-t">
 				<b>Voertuig Informatie</b>
-				<div class="mt-2 bg-slate-50 rounded p-3">
+				<div class="mt-2 ${boxClass} rounded p-3">
 					<div><b>Kenteken:</b> ${data.kenteken || "-"}</div>
 					${apkData.merk ? `<div><b>Merk:</b> ${apkData.merk}</div>` : ""}
 					${apkData.handelsbenaming ? `<div><b>Model:</b> ${apkData.handelsbenaming}</div>` : ""}
-					<div><b>APK Geldig tot:</b> <span class="${apkClass}">${apkStatusText}</span></div>
+					<div><b>APK Geldig tot:</b> ${apkStatusText}</div>
 					${apkData.checked_at ? `<div class="text-xs text-slate-500 mt-1">Laatst gecontroleerd: ${apkData.checked_at}</div>` : ""}
 				</div>
 			</div>`;
