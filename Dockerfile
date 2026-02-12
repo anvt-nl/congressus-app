@@ -12,7 +12,7 @@ RUN mkdir /db && chown appuser:appuser /db
 COPY source/requirements.txt /app/requirements.txt
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl=8.14.1-2+deb13u2 && \
+    apt-get install -y --no-install-recommends curl && \
     pip install --no-cache-dir -r /app/requirements.txt && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
