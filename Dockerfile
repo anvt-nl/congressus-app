@@ -1,4 +1,4 @@
-FROM python:3.14
+FROM python:3.12-slim
 
 # 1. Setup user and structure
 RUN adduser --disabled-password --gecos '' appuser
@@ -12,7 +12,7 @@ RUN mkdir /db && chown appuser:appuser /db
 COPY source/requirements.txt /app/requirements.txt
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl && \
+    apt-get install -y --no-install-recommends curl build-essential && \
     pip install --no-cache-dir -r /app/requirements.txt && \
     apt-get remove -y build-essential && \
     apt-get autoremove -y && \
