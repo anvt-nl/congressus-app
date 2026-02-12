@@ -12,8 +12,10 @@ RUN mkdir /db && chown appuser:appuser /db
 COPY source/requirements.txt /app/requirements.txt
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl && \
+    apt-get install -y --no-install-recommends curl build-essential && \
     pip install --no-cache-dir -r /app/requirements.txt && \
+    apt-get remove -y build-essential && \
+    apt-get autoremove -y && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
