@@ -72,7 +72,6 @@ WORKING_DIRECTORY = __file__.rsplit("/", 1)[0]
 # Get scriptname
 SCRIPT_NAME = __file__.rsplit("/", 1)[-1].split(".")[0]
 
-KENTEKENS_FILE = os.getenv("KENTEKENS_FILE", f"/db/kenteken.json")
 api_access_key = open(f"{WORKING_DIRECTORY}/{API_KEY_PATH}").read().strip()
 headers = {"Authorization": f"Bearer {api_access_key}"}
 
@@ -103,20 +102,6 @@ def normalize_kenteken(kenteken: str) -> str:
                 kenteken_split[0] = kenteken_split[0][:2] + "-" + kenteken_split[0][2:]
             kenteken = kenteken_split[0] + "-" + kenteken_split[1]
     return kenteken
-
-
-# Read kentekens.json if exists and normalize
-if os.path.exists(KENTEKENS_FILE):
-    with open(KENTEKENS_FILE, "r", encoding="utf-8") as f:
-        kentekens = json.load(f)
-else:
-    print(f"Kentekens file {KENTEKENS_FILE} not found. Proceeding without kentekens.")
-    kentekens = {}
-
-for kenteken_entry in kentekens.keys():
-    kentekens[kenteken_entry] = normalize_kenteken(kentekens[kenteken_entry])
-print(f"Loaded {len(kentekens)} kentekens from {KENTEKENS_FILE}")
-print(json.dumps(kentekens, indent=2))
 
 
 def init_db():

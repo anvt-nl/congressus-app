@@ -229,22 +229,32 @@ function renderSubTable(title, rows) {
     html += `<tr class="${trClass}" ${trOnClick}>
             <td class="px-2 py-2 truncate max-w-[120px]" title="${p.addressee}">${p.addressee || ""}</td>
             <td class="px-2 py-2 truncate max-w-[120px]" title="${p.email}">${p.email || ""}</td>`;
-    // Add APK background color to kenteken cell
+    // Add APK styling to kenteken cell
     const apkData = apkStatusData[ticketId];
     let apkBgColor = "";
+    let apkTextColor = "";
+
     if (!p.kenteken) {
       apkBgColor = "bg-gray-100"; // Geen kenteken ingevuld
     } else if (apkData) {
-      apkBgColor = getApkBackgroundColor(apkData?.vervaldatum_apk);
-    } else if (p.kenteken && typeof apkData === "undefined") {
-      // Kenteken niet in database/backend: geen kleur (standaard)
-      apkBgColor = "";
-    } else if (p.kenteken && !apkData) {
-      // Kenteken bekend, geen APK gegevens
-      apkBgColor = "bg-yellow-100";
+      // We have APK data
+      if (apkData.vervaldatum_apk) {
+        // We have a date - use green/red background
+        apkBgColor = getApkBackgroundColor(apkData.vervaldatum_apk);
+      } else if (apkData.merk || apkData.handelsbenaming) {
+        // We have vehicle info but NO date -> Yellow background
+        apkBgColor = "bg-yellow-100";
+      } else {
+        // We have an apkData entry but it's empty? Treat as no info.
+        apkTextColor = "text-red-600 font-bold";
+      }
+    } else {
+      // No APK data found (apkData is undefined/null) -> Default bg, Red text
+      apkTextColor = "text-red-600 font-bold";
     }
+
     html += `
-            <td class="px-2 py-2 truncate max-w-[120px] ${apkBgColor}" title="${p.kenteken || ""}">${p.kenteken || ""}</td>`;
+            <td class="px-2 py-2 truncate max-w-[120px] ${apkBgColor} ${apkTextColor}" title="${p.kenteken || ""}">${p.kenteken || ""}</td>`;
     // Status-cel nooit tonen
     html += `
             <td class="px-2 py-2">${presenceStr}</td>
