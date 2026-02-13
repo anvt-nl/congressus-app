@@ -411,32 +411,6 @@ async function fetchApkStatus(eventId) {
   }
 }
 
-// Helper function to format and color-code APK expiration date
-function formatApkStatus(vervaldatum) {
-  if (!vervaldatum) return { text: "-", color: "text-slate-400" };
-
-  // Parse date (format: YYYYMMDD)
-  const year = vervaldatum.substring(0, 4);
-  const month = vervaldatum.substring(4, 6);
-  const day = vervaldatum.substring(6, 8);
-  const apkDate = new Date(`${year}-${month}-${day}`);
-  const today = new Date();
-  const daysDiff = Math.floor((apkDate - today) / (1000 * 60 * 60 * 24));
-
-  // Format as DD-MM-YYYY
-  const formatted = `${day}-${month}-${year}`;
-
-  // Color code based on days until expiration
-  let color = "text-green-600"; // Valid
-  if (daysDiff < 0) {
-    color = "text-red-600"; // Expired
-  } else if (daysDiff < 30) {
-    color = "text-yellow-600"; // Expiring soon
-  }
-
-  return { text: formatted, color: color };
-}
-
 // Helper function to get background color class for APK status
 function getApkBackgroundColor(vervaldatum) {
   if (!vervaldatum) return "bg-yellow-100"; // Light yellow if kenteken found but no APK data
