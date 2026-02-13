@@ -444,11 +444,6 @@ def get_apk_status(event_id: str):
     return results
 
 
-def main():
-    all_events = get_events(force_refresh=False)
-    log(f"Total events fetched: {len(all_events)}")
-
-
 def get_events(force_refresh: bool = False):
 
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
@@ -1022,7 +1017,3 @@ def do_check_apk_status(event_id: str):
 
 def log(message: str = ""):
     print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {message}")
-
-
-if __name__ == "__main__":
-    main()
