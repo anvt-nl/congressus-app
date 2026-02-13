@@ -231,7 +231,14 @@ function renderSubTable(title, rows) {
             <td class="px-2 py-2 truncate max-w-[120px]" title="${p.email}">${p.email || ""}</td>`;
     // Add APK background color to kenteken cell
     const apkData = apkStatusData[ticketId];
-    const apkBgColor = getApkBackgroundColor(apkData?.vervaldatum_apk);
+    let apkBgColor = "";
+    if (!p.kenteken) {
+      apkBgColor = "bg-gray-100"; // Kenteken niet gevonden
+    } else if (p.kenteken && !apkData) {
+      apkBgColor = "bg-yellow-100"; // Kenteken gevonden, geen APK gegevens
+    } else {
+      apkBgColor = getApkBackgroundColor(apkData?.vervaldatum_apk);
+    }
     html += `
             <td class="px-2 py-2 truncate max-w-[120px] ${apkBgColor}" title="${p.kenteken || ""}">${p.kenteken || ""}</td>`;
     // Status-cel nooit tonen
@@ -418,7 +425,7 @@ function formatApkStatus(vervaldatum) {
 
 // Helper function to get background color class for APK status
 function getApkBackgroundColor(vervaldatum) {
-  if (!vervaldatum) return ""; // No background color if APK is unknown
+  if (!vervaldatum) return "bg-yellow-100"; // Light yellow if kenteken found but no APK data
 
   // Parse date (format: YYYYMMDD)
   const year = vervaldatum.substring(0, 4);
