@@ -233,11 +233,15 @@ function renderSubTable(title, rows) {
     const apkData = apkStatusData[ticketId];
     let apkBgColor = "";
     if (!p.kenteken) {
-      apkBgColor = "bg-gray-100"; // Kenteken niet gevonden
-    } else if (p.kenteken && !apkData) {
-      apkBgColor = "bg-yellow-100"; // Kenteken gevonden, geen APK gegevens
-    } else {
+      apkBgColor = "bg-gray-100"; // Geen kenteken ingevuld
+    } else if (apkData) {
       apkBgColor = getApkBackgroundColor(apkData?.vervaldatum_apk);
+    } else if (p.kenteken && typeof apkData === "undefined") {
+      // Kenteken niet in database/backend: geen kleur (standaard)
+      apkBgColor = "";
+    } else if (p.kenteken && !apkData) {
+      // Kenteken bekend, geen APK gegevens
+      apkBgColor = "bg-yellow-100";
     }
     html += `
             <td class="px-2 py-2 truncate max-w-[120px] ${apkBgColor}" title="${p.kenteken || ""}">${p.kenteken || ""}</td>`;
