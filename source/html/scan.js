@@ -106,16 +106,38 @@ function onScanSuccess(decodedText, decodedResult) {
   // Stop scanning
   stopScanning();
 
-  // Show results
-  scanResult.textContent = decodedText;
-  resultsContainer.classList.remove("hidden");
+  try {
+    const data = JSON.parse(decodedText);
+    const accessKey = data.id || data.access_key;
 
-  // Recreate icons
-  lucide.createIcons();
+    if (!accessKey) {
+      showError("Invalid QR Code: Missing 'id' or 'access_key' in JSON.");
+      return;
+    }
 
-  // Optional: Play success sound or vibration
-  if (navigator.vibrate) {
-    navigator.vibrate(200);
+    // Call backend to look up ticket
+    fetch(`/ticket/by-access-key/${accessKey}`)
+      .then((response) => {
+        if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error("Ticket not found in database.");
+          }
+          throw new Error(`Server error: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then((ticket) => {
+        // Redirect to ticket page
+        window.location.href = `ticket.html?event_id=${ticket.event_id}&obj_id=${ticket.obj_id}`;
+      })
+      .catch((err) => {
+        showError(err.message);
+      });
+  } catch (e) {
+    showError("Invalid QR Code: Scanned data is not valid JSON.");
+    // Show raw text for debugging if needed, or keeping it hidden to avoid confusion
+    scanResult.textContent = decodedText;
+    resultsContainer.classList.remove("hidden");
   }
 }
 

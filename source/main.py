@@ -104,6 +104,34 @@ def normalize_kenteken(kenteken: str) -> str:
     return kenteken
 
 
+def migrate_tickets_schema(cursor):
+    # Check if access_key column exists
+    cursor.execute("PRAGMA table_info(tickets)")
+    columns = [info[1] for info in cursor.fetchall()]
+    if "access_key" not in columns:
+        print("Migrating tickets table: adding access_key column...")
+        cursor.execute("ALTER TABLE tickets ADD COLUMN access_key TEXT")
+
+        # Populate existing records
+        print("Populating access_key for existing tickets...")
+        cursor.execute("SELECT obj_id, data FROM tickets")
+        rows = cursor.fetchall()
+        updated_count = 0
+        for obj_id, data_str in rows:
+            try:
+                data = json.loads(data_str)
+                access_key = data.get("access_key")
+                if access_key:
+                    cursor.execute(
+                        "UPDATE tickets SET access_key = ? WHERE obj_id = ?",
+                        (access_key, obj_id),
+                    )
+                    updated_count += 1
+            except json.JSONDecodeError:
+                continue
+        print(f"Migrated {updated_count} tickets with access_key.")
+
+
 def init_db():
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
         cursor = conn.cursor()
@@ -137,7 +165,8 @@ def init_db():
                 obj_id TEXT PRIMARY KEY,
                 event_id TEXT,
                 data TEXT,
-                last_updated TEXT
+                last_updated TEXT,
+                access_key TEXT
             )
         """
         )
@@ -163,6 +192,12 @@ def init_db():
             )
         """
         )
+
+        try:
+            migrate_tickets_schema(cursor)
+        except Exception as e:
+            print(f"Migration failed: {e}")
+
         conn.commit()
 
 
@@ -210,6 +245,26 @@ async def html_page(page_name: str) -> fastapi.responses.HTMLResponse:
             content = file.read()
         return fastapi.responses.HTMLResponse(status_code=200, content=content)
     return fastapi.responses.Response(status_code=404, content="Page not found")
+
+
+@app.get("/ticket/by-access-key/{access_key}")
+def get_ticket_by_access_key(access_key: str):
+    """
+    Look up a ticket by its access_key (from QR code).
+    Returns event_id and obj_id (participation ID) to navigate to the ticket page.
+    """
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT event_id, obj_id FROM tickets WHERE access_key = ?", (access_key,)
+        )
+        row = cursor.fetchone()
+        if row:
+            return {"event_id": row[0], "obj_id": row[1]}
+        else:
+            return fastapi.responses.JSONResponse(
+                status_code=404, content={"message": "Ticket not found"}
+            )
 
 
 @app.get("/events")
@@ -448,10 +503,6 @@ def get_events(force_refresh: bool = False):
 
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
         cursor = conn.cursor()
-
-    with sqlite3.connect(DB_PATH, timeout=30) as conn:
-        cursor = conn.cursor()
-
         # Table creation moved to init_db
 
         # fetch all events from sqlite
@@ -503,10 +554,11 @@ def get_events(force_refresh: bool = False):
                 cursor.execute("DELETE FROM events WHERE event_id = ?", (event_id,))
             conn.commit()
             log(f"Removed {removed_events} obsolete events from DB.")
-            participations = get_participations(
-                [event["id"] for event in events], force_refresh=force_refresh
-            )
-            log(f"Participations: {json.dumps(participations)}")
+            participations = []
+            for event in events:
+                p = get_participations(event["id"], force_refresh=force_refresh)
+                participations.extend(p)
+            log(f"Total participations fetched: {len(participations)}")
         else:
             log("Loading events from DB...")
             events = []
@@ -555,174 +607,176 @@ def get_event(event_id: str):
 
 
 def filter_events(events_list: List[Dict]) -> List[Dict]:
-    conn = sqlite3.connect(DB_PATH, timeout=30)
-    cursor = conn.cursor()
-    return_events = []
-    for event in events_list:
-        if event["published"] is False:
-            continue
-        leden_num_tickets = 0
-        leden_sold_tickets = 0
-        niet_leden_num_tickets = 0
-        niet_leden_sold_tickets = 0
-        log(f"Start: {event['start']}")
-        log(f"Ticket types for event {event['id']}: {event['name']}")
-        for tickets in event["ticket_types"]:
-            if tickets["price"] == 0 and tickets["num_tickets"] is not None:
-                leden_num_tickets += tickets.get("num_tickets", 0)
-            elif tickets["price"] > 39 and tickets["num_tickets"] is not None:
-                niet_leden_num_tickets += tickets.get("num_tickets", 0)
-        cursor.execute(
-            "SELECT data FROM participations WHERE event_id = ?", (event["id"],)
-        )
-        participations = [json.loads(row[0]) for row in cursor.fetchall()]
-        if participations != "[]":
-            for participation in participations:
-                if participation["status"] != "approved":
-                    continue
-                if participation["member_id"] is not None:
-                    leden_sold_tickets += 1
-                elif participation["member_id"] is None:
-                    niet_leden_sold_tickets += 1
-        log(
-            f"Event {event['id']} - Leden: {leden_sold_tickets}/{leden_num_tickets}, Niet leden: {niet_leden_sold_tickets}/{niet_leden_num_tickets}"
-        )
-        return_events.append(
-            {
-                "id": event["id"],
-                "name": event["name"],
-                "start": event["start"],
-                "leden_num_tickets": leden_num_tickets,
-                "leden_sold_tickets": leden_sold_tickets,
-                "niet_leden_num_tickets": niet_leden_num_tickets,
-                "niet_leden_sold_tickets": niet_leden_sold_tickets,
-                "present_leden": event.get("present_leden", 0),
-                "present_vrijrijders": event.get("present_vrijrijders", 0),
-            }
-        )
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
+        return_events = []
+        for event in events_list:
+            if event["published"] is False:
+                continue
+            leden_num_tickets = 0
+            leden_sold_tickets = 0
+            niet_leden_num_tickets = 0
+            niet_leden_sold_tickets = 0
+            log(f"Start: {event['start']}")
+            log(f"Ticket types for event {event['id']}: {event['name']}")
+            for tickets in event["ticket_types"]:
+                if tickets["price"] == 0 and tickets["num_tickets"] is not None:
+                    leden_num_tickets += tickets.get("num_tickets", 0)
+                elif tickets["price"] > 39 and tickets["num_tickets"] is not None:
+                    niet_leden_num_tickets += tickets.get("num_tickets", 0)
+            cursor.execute(
+                "SELECT data FROM participations WHERE event_id = ?", (event["id"],)
+            )
+            participations = [json.loads(row[0]) for row in cursor.fetchall()]
+            if participations != "[]":
+                for participation in participations:
+                    if participation["status"] != "approved":
+                        continue
+                    if participation["member_id"] is not None:
+                        leden_sold_tickets += 1
+                    elif participation["member_id"] is None:
+                        niet_leden_sold_tickets += 1
+            log(
+                f"Event {event['id']} - Leden: {leden_sold_tickets}/{leden_num_tickets}, Niet leden: {niet_leden_sold_tickets}/{niet_leden_num_tickets}"
+            )
+            return_events.append(
+                {
+                    "id": event["id"],
+                    "name": event["name"],
+                    "start": event["start"],
+                    "leden_num_tickets": leden_num_tickets,
+                    "leden_sold_tickets": leden_sold_tickets,
+                    "niet_leden_num_tickets": niet_leden_num_tickets,
+                    "niet_leden_sold_tickets": niet_leden_sold_tickets,
+                    "present_leden": event.get("present_leden", 0),
+                    "present_vrijrijders": event.get("present_vrijrijders", 0),
+                }
+            )
     return return_events
 
 
 def get_participations(event_id: int, force_refresh: bool = False):
-    conn = sqlite3.connect(DB_PATH, timeout=30)
-    cursor = conn.cursor()
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
 
-    # Fetch all participations from sqlite
-    # Fetch all participations from sqlite
-
-    cursor.execute(
-        "SELECT participation_id, data, last_updated FROM participations WHERE event_id = ?",
-        (event_id,),
-    )
-
-    existing_participation_ids = {row[0]: (row[1], row[2]) for row in cursor.fetchall()}
-    if not existing_participation_ids:
-        log(f"No existing participations for event {event_id} in DB. Forcing refresh.")
-        force_refresh = True
-
-    if force_refresh:
-        log(f"Fetching participations for event {event_id} from API...")
-
-        has_next = True
-        params = {"page_size": PAGE_SIZE, "page": 1}
-        url = f"{API_URL}/events/{event_id}/participations"
-        participations: List[Dict] = []
-
-        while has_next:
-            resp = HTTP_CLIENT.get(url, params=params)
-            resp.raise_for_status()
-
-            participations += resp.json().get("data", [])
-            has_next = resp.json().get("has_next", False)
-            if has_next:
-                params["page"] = resp.json().get("next_num", params["page"] + 1)
-
-        log(
-            f"Fetched {len(participations)} participations from API for event {event_id}."
-        )
-        log("Storing participations in DB...")
-
-        for participation in participations:
-            # Strip whitespace from all string values in participation dict
-            def strip_values(obj):
-                if isinstance(obj, dict):
-                    return {k: strip_values(v) for k, v in obj.items()}
-                elif isinstance(obj, list):
-                    return [strip_values(i) for i in obj]
-                elif isinstance(obj, str):
-                    return obj.strip()
-                else:
-                    return obj
-
-            participation = strip_values(participation)
-            participation_id = participation["id"]
-            cursor.execute(
-                """
-                INSERT OR REPLACE INTO participations (participation_id, event_id, data, last_updated)
-                VALUES (?, ?, ?, ?)
-            """,
-                (
-                    participation_id,
-                    event_id,
-                    json.dumps(participation),
-                    time.strftime("%Y-%m-%d %H:%M:%S"),
-                ),
-            )
-        conn.commit()
-        log("Participations stored in DB.")
-
-        # Remove participation IDs that are now in the database from existing_participation_ids
-        removed_participations = 0
-        for participation_id in existing_participation_ids:
-            if participation_id in [
-                str(participation["id"]) for participation in participations
-            ]:
-                continue
-            removed_participations += 1
-            cursor.execute(
-                "DELETE FROM participations WHERE participation_id = ?",
-                (participation_id,),
-            )
-        conn.commit()
-        log(f"Removed {removed_participations} obsolete participations from DB.")
-    else:
-        log(f"Loading participations for event {event_id} from DB...")
-        participations = []
-        for row in cursor.execute(
+        cursor.execute(
             "SELECT participation_id, data, last_updated FROM participations WHERE event_id = ?",
             (event_id,),
-        ):
-            participations.append(json.loads(row[1]))
-        log(
-            f"Fetched {len(participations)} participations from DB for event {event_id}."
         )
 
-    try:
-        cursor.execute("SELECT data FROM tickets WHERE event_id = ?", (event_id,))
-    except sqlite3.OperationalError:
-        log("Tickets table does not exist yet.")
-        tickets = []
-    else:
-        tickets = [json.loads(row[0]) for row in cursor.fetchall()]
-    log(f"Fetched {len(tickets)} tickets from DB for event {event_id}.")
+        existing_participation_ids = {
+            row[0]: (row[1], row[2]) for row in cursor.fetchall()
+        }
+        if not existing_participation_ids:
+            log(
+                f"No existing participations for event {event_id} in DB. Forcing refresh."
+            )
+            force_refresh = True
 
-    # Fetch kentekens from database
-    cursor.execute("SELECT id, kenteken FROM kentekens")
-    kentekens_db = {row[0]: row[1] for row in cursor.fetchall()}
+        if force_refresh:
+            log(f"Fetching participations for event {event_id} from API...")
 
-    for participation in participations:
-        participation_pressence = 0
-        participation_tickets = None
-        for ticket in tickets:
-            if ticket.get("id") == participation.get("id"):
-                participation_tickets = len(ticket.get("tickets", []))
-                for t in ticket.get("tickets", []):
-                    if t.get("status_presence") == "present":
-                        participation_pressence += 1
-        participation["presence_count"] = participation_pressence
-        participation["tickets"] = participation_tickets
-        participation["kenteken"] = kentekens_db.get(str(participation.get("id")), "")
-    conn.close()
+            has_next = True
+            params = {"page_size": PAGE_SIZE, "page": 1}
+            url = f"{API_URL}/events/{event_id}/participations"
+            participations: List[Dict] = []
+
+            while has_next:
+                resp = HTTP_CLIENT.get(url, params=params)
+                resp.raise_for_status()
+
+                participations += resp.json().get("data", [])
+                has_next = resp.json().get("has_next", False)
+                if has_next:
+                    params["page"] = resp.json().get("next_num", params["page"] + 1)
+
+            log(
+                f"Fetched {len(participations)} participations from API for event {event_id}."
+            )
+            log("Storing participations in DB...")
+
+            for participation in participations:
+                # Strip whitespace from all string values in participation dict
+                def strip_values(obj):
+                    if isinstance(obj, dict):
+                        return {k: strip_values(v) for k, v in obj.items()}
+                    elif isinstance(obj, list):
+                        return [strip_values(i) for i in obj]
+                    elif isinstance(obj, str):
+                        return obj.strip()
+                    else:
+                        return obj
+
+                participation = strip_values(participation)
+                participation_id = participation["id"]
+                cursor.execute(
+                    """
+                    INSERT OR REPLACE INTO participations (participation_id, event_id, data, last_updated)
+                    VALUES (?, ?, ?, ?)
+                """,
+                    (
+                        participation_id,
+                        event_id,
+                        json.dumps(participation),
+                        time.strftime("%Y-%m-%d %H:%M:%S"),
+                    ),
+                )
+            conn.commit()
+            log("Participations stored in DB.")
+
+            # Remove participation IDs that are now in the database from existing_participation_ids
+            removed_participations = 0
+            for participation_id in existing_participation_ids:
+                if participation_id in [
+                    str(participation["id"]) for participation in participations
+                ]:
+                    continue
+                removed_participations += 1
+                cursor.execute(
+                    "DELETE FROM participations WHERE participation_id = ?",
+                    (participation_id,),
+                )
+            conn.commit()
+            log(f"Removed {removed_participations} obsolete participations from DB.")
+        else:
+            log(f"Loading participations for event {event_id} from DB...")
+            participations = []
+            for row in cursor.execute(
+                "SELECT participation_id, data, last_updated FROM participations WHERE event_id = ?",
+                (event_id,),
+            ):
+                participations.append(json.loads(row[1]))
+            log(
+                f"Fetched {len(participations)} participations from DB for event {event_id}."
+            )
+
+        try:
+            cursor.execute("SELECT data FROM tickets WHERE event_id = ?", (event_id,))
+        except sqlite3.OperationalError:
+            log("Tickets table does not exist yet.")
+            tickets = []
+        else:
+            tickets = [json.loads(row[0]) for row in cursor.fetchall()]
+        log(f"Fetched {len(tickets)} tickets from DB for event {event_id}.")
+
+        # Fetch kentekens from database
+        cursor.execute("SELECT id, kenteken FROM kentekens")
+        kentekens_db = {row[0]: row[1] for row in cursor.fetchall()}
+
+        for participation in participations:
+            participation_pressence = 0
+            participation_tickets = None
+            for ticket in tickets:
+                if ticket.get("id") == participation.get("id"):
+                    participation_tickets = len(ticket.get("tickets", []))
+                    for t in ticket.get("tickets", []):
+                        if t.get("status_presence") == "present":
+                            participation_pressence += 1
+            participation["presence_count"] = participation_pressence
+            participation["tickets"] = participation_tickets
+            participation["kenteken"] = kentekens_db.get(
+                str(participation.get("id")), ""
+            )
 
     # Filter fields to reduce payload size
     filtered_participations = []
@@ -772,16 +826,18 @@ def get_ticket(event_id: str, obj_id: str, refresh: bool = False):
 
             data = resp.json()
             log("Storing ticket in DB...")
+            access_key = data.get("access_key")
             cursor.execute(
                 """
-                INSERT OR REPLACE INTO tickets (obj_id, event_id, data, last_updated)
-                VALUES (?, ?, ?, ?)
+                INSERT OR REPLACE INTO tickets (obj_id, event_id, data, last_updated, access_key)
+                VALUES (?, ?, ?, ?, ?)
             """,
                 (
                     obj_id,
                     event_id,
                     json.dumps(data),
                     time.strftime("%Y-%m-%d %H:%M:%S"),
+                    access_key,
                 ),
             )
             conn.commit()
@@ -815,31 +871,30 @@ def filter_tickets(tickets_list: Dict) -> Dict:
 
 def do_update_ticket(event_id: str, obj_id: str, new_status: str):
     log(f"New status: {new_status}")
-    conn = sqlite3.connect(DB_PATH, timeout=30)
-    cursor = conn.cursor()
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
 
-    cursor.execute(
-        """
-        SELECT data FROM tickets WHERE obj_id = ? AND event_id = ?
-    """,
-        (obj_id, event_id),
-    )
+        cursor.execute(
+            """
+            SELECT data FROM tickets WHERE obj_id = ? AND event_id = ?
+        """,
+            (obj_id, event_id),
+        )
 
-    row = cursor.fetchone()
-    if not row:
-        conn.close()
-        return {"status": "error", "message": f"Ticket {obj_id} not found."}
+        row = cursor.fetchone()
+        if not row:
+            return {"status": "error", "message": f"Ticket {obj_id} not found."}
 
-    json_data = json.loads(row[0])
-    for ticket in json_data.get("tickets", []):
-        if ticket["status_presence"] == new_status:
-            log(
-                f"Ticket {ticket['id']} already has status_presence {new_status}. No update needed."
-            )
-            return {
-                "status": "success",
-                "message": f"Ticket {obj_id} already has status_presence {new_status}.",
-            }
+        json_data = json.loads(row[0])
+        for ticket in json_data.get("tickets", []):
+            if ticket["status_presence"] == new_status:
+                log(
+                    f"Ticket {ticket['id']} already has status_presence {new_status}. No update needed."
+                )
+                return {
+                    "status": "success",
+                    "message": f"Ticket {obj_id} already has status_presence {new_status}.",
+                }
 
     # https://api.congressus.nl/v30/events/{event_id}/participations/{obj_id}/set-presence
     url = f"{API_URL}/events/{event_id}/participations/{obj_id}/set-presence"
@@ -848,7 +903,6 @@ def do_update_ticket(event_id: str, obj_id: str, new_status: str):
     resp = HTTP_CLIENT.post(url, json=payload)
     resp.raise_for_status()
 
-    conn.close()
     if resp.status_code != 204:
         log(f"Failed to update ticket {obj_id}. Status code: {resp.status_code}")
         return {"status": "error", "message": f"Failed to update ticket {obj_id}."}

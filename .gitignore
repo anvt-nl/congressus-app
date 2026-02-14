@@ -9,3 +9,4 @@ testing/*.txt
 source/venv
 source/.venv
 testing/.venv
+.venv
