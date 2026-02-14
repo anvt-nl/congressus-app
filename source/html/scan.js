@@ -128,7 +128,7 @@ function onScanSuccess(decodedText, decodedResult) {
       })
       .then((ticket) => {
         // Redirect to ticket page
-        window.location.href = `ticket.html?event_id=${ticket.event_id}&obj_id=${ticket.obj_id}`;
+        window.location.href = `ticket.html?event_id=${ticket.event_id}&obj_id=${ticket.obj_id}&highlight_key=${accessKey}`;
       })
       .catch((err) => {
         showError(err.message);

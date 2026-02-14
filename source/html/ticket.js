@@ -46,8 +46,19 @@ async function fetchTicketDetails() {
                 const qrImage = tt.ticket_qrcode
                   ? `<img src="${tt.ticket_qrcode}" alt="QR Code" class="w-16 h-16 object-contain border rounded bg-white hover:scale-[3] transform transition origin-left relative z-10" title="Hover to enlarge" />`
                   : "-";
+
+                // Check if this ticket is the one scanned
+                const urlParams = new URLSearchParams(window.location.search);
+                const highlightKey = urlParams.get("highlight_key");
+                const isHighlighted =
+                  highlightKey &&
+                  (tt.access_key === highlightKey || tt.id === highlightKey);
+                const rowClass = isHighlighted
+                  ? "bg-yellow-100 border-l-4 border-yellow-500"
+                  : "cursor-pointer hover:bg-blue-100";
+
                 return `
-							<tr class='cursor-pointer hover:bg-blue-100' onclick='showPresenceOverlay(${idx})'>
+							<tr class='${rowClass}' onclick='showPresenceOverlay(${idx})'>
 								<td class="px-3 py-2">${tt.ticket_type || "-"}</td>
 								<td class="px-3 py-2" onclick="event.stopPropagation()">${qrImage}</td>
 								<td class="px-3 py-2">${presenceText}</td>
