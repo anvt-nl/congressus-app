@@ -35,6 +35,7 @@ async function fetchTicketDetails() {
 				<table class="min-w-full mt-2 mb-2 bg-slate-50 rounded border">
 					<thead><tr>
 						<th class="px-3 py-2 text-left">Type</th>
+						<th class="px-3 py-2 text-left">QR Code</th>
 						<th class="px-3 py-2 text-left">Aanwezig</th>
 					</tr></thead>
 					<tbody>
@@ -42,9 +43,13 @@ async function fetchTicketDetails() {
               .map((tt, idx) => {
                 const presenceText =
                   tt.status_presence === "present" ? "ja" : "nee";
+                const qrImage = tt.ticket_qrcode
+                  ? `<img src="${tt.ticket_qrcode}" alt="QR Code" class="w-16 h-16 object-contain border rounded bg-white hover:scale-[3] transform transition origin-left relative z-10" title="Hover to enlarge" />`
+                  : "-";
                 return `
 							<tr class='cursor-pointer hover:bg-blue-100' onclick='showPresenceOverlay(${idx})'>
 								<td class="px-3 py-2">${tt.ticket_type || "-"}</td>
+								<td class="px-3 py-2" onclick="event.stopPropagation()">${qrImage}</td>
 								<td class="px-3 py-2">${presenceText}</td>
 							</tr>
 							`;

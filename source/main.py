@@ -916,6 +916,7 @@ def filter_tickets(tickets_list: Dict) -> Dict:
                 "ticket_type": ticket.get("ticket_type", {}).get("name", ""),
                 "price": ticket.get("ticket_type", {}).get("price", 0),
                 "id": ticket.get("id", ""),
+                "ticket_qrcode": ticket.get("ticket_qrcode", ""),
             }
         )
 
