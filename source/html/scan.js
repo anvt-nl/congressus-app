@@ -132,7 +132,7 @@ function onScanSuccess(decodedText, decodedResult) {
       })
       .then((ticket) => {
         // Redirect to ticket page
-        window.location.href = `ticket.html?event_id=${ticket.event_id}&obj_id=${ticket.obj_id}&highlight_key=${accessKey}`;
+        window.location.href = `ticket.html?event_id=${ticket.event_id}&ticket_id=${ticket.obj_id}&highlight_key=${accessKey}`;
       })
       .catch((err) => {
         if (err.message === "Ticket not found in database.") {
