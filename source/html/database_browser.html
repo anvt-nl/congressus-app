@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Database Browser</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="bg-slate-50 min-h-screen text-slate-900">
+    <div class="flex h-screen overflow-hidden">
+      <!-- Sidebar -->
+      <aside
+        class="w-64 bg-white border-r border-slate-200 flex flex-col shrink-0 z-10"
+      >
+        <div class="p-4 border-b border-slate-200 flex items-center gap-3">
+          <a
+            href="index.html"
+            class="p-2 -ml-2 text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-lg transition"
+            title="Back to Dashboard"
+          >
+            <i data-lucide="arrow-left" class="w-5 h-5"></i>
+          </a>
+          <div class="flex items-center gap-2 font-bold text-slate-800">
+            <i data-lucide="database" class="w-5 h-5 text-blue-600"></i>
+            <span>DB Browser</span>
+          </div>
+        </div>
+        <div class="p-4 overflow-y-auto flex-1">
+          <h2
+            class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-2"
+          >
+            Tables
+          </h2>
+          <ul id="tableList" class="space-y-1">
+            <li class="px-2 py-8 text-center text-slate-400 text-sm italic">
+              Loading tables...
+            </li>
+          </ul>
+        </div>
+        <div class="p-4 border-t border-slate-200 bg-slate-50">
+          <p class="text-xs text-slate-500 text-center">
+            Congressus Cache Browser
+          </p>
+        </div>
+      </aside>
+
+      <!-- Main Content -->
+      <main
+        class="flex-1 flex flex-col h-full overflow-hidden bg-slate-50 relative"
+      >
+        <!-- Header -->
+        <header
+          class="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center shadow-sm z-10"
+        >
+          <div>
+            <h1
+              id="currentTableTitle"
+              class="text-2xl font-bold text-slate-900 flex items-center gap-2"
+            >
+              <span class="opacity-50 font-normal">Select a table</span>
+            </h1>
+          </div>
+          <div id="tableMeta" class="hidden flex items-center gap-4 text-sm">
+            <span
+              class="px-3 py-1 bg-blue-50 text-blue-700 rounded-full border border-blue-100 font-medium"
+            >
+              <span id="rowCount">0</span> rows
+            </span>
+            <button
+              id="refreshBtn"
+              class="p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition"
+              title="Refresh Data"
+            >
+              <i data-lucide="refresh-cw" class="w-5 h-5"></i>
+            </button>
+          </div>
+        </header>
+
+        <!-- Loading Overlay -->
+        <div
+          id="loadingOverlay"
+          class="hidden absolute inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center z-20"
+        >
+          <div
+            class="flex flex-col items-center gap-3 bg-white p-6 rounded-2xl shadow-xl border border-slate-100"
+          >
+            <div
+              class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"
+            ></div>
+            <p class="text-slate-600 font-medium">Fetching data...</p>
+          </div>
+        </div>
+
+        <!-- Table Area -->
+        <div class="flex-1 overflow-auto p-6" id="scrollContainer">
+          <!-- Empty State -->
+          <div
+            id="emptyState"
+            class="h-full flex flex-col items-center justify-center text-slate-400"
+          >
+            <div
+              class="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-6"
+            >
+              <i
+                data-lucide="table"
+                class="w-10 h-10 opacity-40 text-slate-500"
+              ></i>
+            </div>
+            <h3 class="text-lg font-semibold text-slate-600 mb-2">
+              No Table Selected
+            </h3>
+            <p class="max-w-xs text-center text-slate-500">
+              Select a table from the sidebar to view its contents.
+            </p>
+          </div>
+
+          <!-- Data Table -->
+          <div
+            id="tableContainer"
+            class="hidden bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden"
+          >
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-slate-200">
+                <thead class="bg-slate-50">
+                  <tr id="tableHeadRow">
+                    <!-- Headers injected here -->
+                  </tr>
+                </thead>
+                <tbody
+                  id="tableBody"
+                  class="bg-white divide-y divide-slate-200 text-sm text-slate-600"
+                >
+                  <!-- Rows injected here -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="database_browser.js"></script>
+  </body>
+</html>
