@@ -47,6 +47,10 @@ function startScanning() {
   resultsContainer.classList.add("hidden");
   errorContainer.classList.add("hidden");
 
+  // Cleanup previous error title if exists
+  const oldTitle = document.getElementById("scanNotFoundTitle");
+  if (oldTitle) oldTitle.remove();
+
   // Show scanner, hide scan button
   scanButtonContainer.classList.add("hidden");
   scannerContainer.classList.remove("hidden");
@@ -131,7 +135,27 @@ function onScanSuccess(decodedText, decodedResult) {
         window.location.href = `ticket.html?event_id=${ticket.event_id}&obj_id=${ticket.obj_id}&highlight_key=${accessKey}`;
       })
       .catch((err) => {
-        showError(err.message);
+        if (err.message === "Ticket not found in database.") {
+          // Show the JSON data instead of error
+          const prettyJson = JSON.stringify(data, null, 2);
+
+          // Remove any existing title first
+          const oldTitle = document.getElementById("scanNotFoundTitle");
+          if (oldTitle) oldTitle.remove();
+
+          // Add a title or message
+          const title = document.createElement("div");
+          title.id = "scanNotFoundTitle";
+          title.className = "text-amber-600 font-bold mb-2";
+          title.textContent = "Ticket niet gevonden in database. Scanned data:";
+
+          scanResult.innerHTML = `<pre class="text-xs text-left overflow-auto max-h-60">${prettyJson}</pre>`;
+          scanResult.parentNode.insertBefore(title, scanResult);
+
+          resultsContainer.classList.remove("hidden");
+        } else {
+          showError(err.message);
+        }
       });
   } catch (e) {
     showError("Invalid QR Code: Scanned data is not valid JSON.");
