@@ -20,7 +20,7 @@ spec:
         - name: ghcr-pull-secret
       containers:
         - name: congressus-app
-          image: ghcr.io/anvt-nl/congressus-app:0.35.0
+          image: ghcr.io/anvt-nl/congressus-app:0.36.0
           imagePullPolicy: Always
           securityContext:
             readOnlyRootFilesystem: true
