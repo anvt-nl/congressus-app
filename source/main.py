@@ -120,7 +120,11 @@ def migrate_tickets_schema(cursor):
         for obj_id, data_str in rows:
             try:
                 data = json.loads(data_str)
-                access_key = data.get("access_key")
+                # Use access_key from the first ticket if available (this is what the scanner sees)
+                if data.get("tickets") and len(data.get("tickets")) > 0:
+                    access_key = data["tickets"][0].get("access_key")
+                else:
+                    access_key = data.get("access_key")
                 if access_key:
                     cursor.execute(
                         "UPDATE tickets SET access_key = ? WHERE obj_id = ?",
@@ -888,7 +892,11 @@ def get_ticket(event_id: str, obj_id: str, refresh: bool = False):
 
             data = resp.json()
             log("Storing ticket in DB...")
-            access_key = data.get("access_key")
+            # Use access_key from the first ticket if available
+            if data.get("tickets") and len(data.get("tickets")) > 0:
+                access_key = data["tickets"][0].get("access_key")
+            else:
+                access_key = data.get("access_key")
             cursor.execute(
                 """
                 INSERT OR REPLACE INTO tickets (obj_id, event_id, data, last_updated, access_key)
