@@ -323,8 +323,8 @@ def scan_ticket(event_id: str, obj_id: str):
     # only allow scanning is event date differs max 7 days from current date
     if event_date_str:
         event_date = datetime.strptime(event_date_str, "%Y-%m-%dT%H:%M:%S")
-        if abs((event_date - datetime.now()).days) > MAX_SCAN_DAYS:
-            ticket_data["scan"] = f"Scannen niet toegestaan: evenement is meer dan {MAX_SCAN_DAYS} dagen geleden of in de toekomst"
+        if (event_date - datetime.now()).days > 3 or (datetime.now() - event_date).days > MAX_SCAN_DAYS:
+            ticket_data["scan"] = f"Scannen niet toegestaan: evenement is meer dan {MAX_SCAN_DAYS} dagen geleden of 3 dagen in de toekomst"
             return ticket_data
     if ticket_data.get("tickets") is not None:
         for ticket in ticket_data["tickets"]:
