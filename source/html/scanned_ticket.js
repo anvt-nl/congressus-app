@@ -42,8 +42,6 @@ async function fetchTicketDetails() {
               .map((tt, idx) => {
                 const presenceText =
                   tt.status_presence === "present" ? "ja" : "nee";
-
-                // Always use default row class, no highlight
                 const rowClass = "cursor-pointer hover:bg-blue-100";
 
                 return `
@@ -61,7 +59,11 @@ async function fetchTicketDetails() {
 
     // Set background to red if any ticket is present
     if (Array.isArray(data.tickets) && data.tickets.some(tt => String(tt.status_presence).toLowerCase().includes('present'))) {
-      document.body.style.backgroundColor = 'red';
+      // Set the background of ticketDetails to light red
+      const ticketDetailsDiv = document.getElementById('ticketDetails');
+      if (ticketDetailsDiv) {
+        ticketDetailsDiv.style.backgroundColor = '#ffe5e5'; // light red
+      }
     }
 
     // Build vehicle/APK info section if available
