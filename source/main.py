@@ -321,14 +321,14 @@ def scan_ticket(event_id: str, obj_id: str):
     if ticket_data.get("tickets") is not None:
         for ticket in ticket_data["tickets"]:
             if ticket["status_presence"] == "present":
-                ticket["scan"] = "FAILED"
+                ticket_data["scan"] = "Ticket is al gescand"
                 break
         else:
             log(f"Handling GET /ticket/{event_id}/{obj_id}/present")
             log(do_update_ticket(event_id, obj_id, "present"))
             ticket_data["scan"] = "OK"
     else:
-        ticket_data["scan"] = "FAILED"
+        ticket_data["scan"] = "Ticket is niet beschikbaar"
     return ticket_data
 
 
