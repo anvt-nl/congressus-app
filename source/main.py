@@ -65,6 +65,7 @@ API_URL = "https://api.congressus.nl/v30"
 API_KEY_PATH = "api-key-2.txt"
 DB_PATH = os.getenv("CONGRESSUS_CACHE_DB", "/db/congressus_cache.db")
 PAGE_SIZE = 100
+MAX_SCAN_DAYS = int(os.getenv("MAX_SCAN_DAYS", 7))
 
 # Get current working directory of the script
 WORKING_DIRECTORY = __file__.rsplit("/", 1)[0]
@@ -318,6 +319,13 @@ def refresh_participations(event_id: str, background_tasks: fastapi.BackgroundTa
 def scan_ticket(event_id: str, obj_id: str):
     log(f"Handling GET /scan-ticket/{event_id}/{obj_id}")
     ticket_data = read_ticket(event_id, obj_id)
+    event_date_str = ticket_data.get("event_date")
+    # only allow scanning is event date differs max 7 days from current date
+    if event_date_str:
+        event_date = datetime.strptime(event_date_str, "%Y-%m-%dT%H:%M:%S")
+        if abs((event_date - datetime.now()).days) > MAX_SCAN_DAYS:
+            ticket_data["scan"] = f"Scannen niet toegestaan: evenement is meer dan {MAX_SCAN_DAYS} dagen geleden of in de toekomst"
+            return ticket_data
     if ticket_data.get("tickets") is not None:
         for ticket in ticket_data["tickets"]:
             if ticket["status_presence"] == "present":
@@ -325,8 +333,11 @@ def scan_ticket(event_id: str, obj_id: str):
                 break
         else:
             log(f"Handling GET /ticket/{event_id}/{obj_id}/present")
-            log(do_update_ticket(event_id, obj_id, "present"))
-            ticket_data["scan"] = "OK"
+            ticket_data = do_update_ticket(event_id, obj_id, "present")
+            if ticket_data.get("error"):
+                ticket_data["scan"] = "Fout bij scannen: " + ticket_data["error"]
+            else:
+                ticket_data["scan"] = "OK"
     else:
         ticket_data["scan"] = "Ticket is niet beschikbaar"
     return ticket_data
