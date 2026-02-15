@@ -72,12 +72,12 @@ async function fetchTicketDetails() {
       const ticketDetailsDiv = document.getElementById('ticketDetails');
       if (ticketDetailsDiv) {
         ticketDetailsDiv.style.backgroundColor = '#d2ffd2'; // light green
-      try {
-      await fetch(`/ticket/${eventId}/${ticketId}/present`, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
-    } catch (e) {}
+      // try {
+      //     await fetch(`/ticket/${eventId}/${ticketId}/${newStatus}`, {
+      //       method: "GET",
+      //       headers: { "Content-Type": "application/json" },
+      //     });
+      //   } catch (e) {}
       }
 
     // Build vehicle/APK info section if available
