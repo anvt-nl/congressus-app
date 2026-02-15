@@ -34,7 +34,7 @@ async function fetchTicketDetails() {
     let ticketTypesTable = "";
     if (Array.isArray(data.tickets) && data.tickets.length > 0) {
       ticketTypesTable = `<div class="mt-4">
-        <b>Scan status:</b> <span style="color:#b00;font-weight:bold;">${data.scan}</span>
+        <b>Scan status:</b> <span style="font-weight:bold;">${data.scan}</span>
         <br/>
 				<b>Ticket Types &amp; Aanwezigheid</b>
 				<table class="min-w-full mt-2 mb-2 bg-slate-50 rounded border">
@@ -78,41 +78,30 @@ async function fetchTicketDetails() {
       if (ticketDetailsDiv) {
         ticketDetailsDiv.style.backgroundColor = '#ffe5e5'; // light red
       }
-      
-      // Voeg een duidelijke foutmelding toe als scan niet "OK" is en toon de waarde van data.scan als dat een string is
-      // const errorMessage = typeof data.scan === 'string' ? data.scan : 'Onbekende fout bij scannen.';
-      // const errorDiv = document.createElement('div');
-      // errorDiv.className = 'text-red-700 font-bold mb-4';
-      // errorDiv.textContent = `Fout: ${errorMessage}`;
-      // const ticketDetailsDiv = document.getElementById('ticketDetails');
-      // if (ticketDetailsDiv) {
-      //   ticketDetailsDiv.parentNode.insertBefore(errorDiv, ticketDetailsDiv);
-      // }
-
-    }
-
-    // Show warning overlay if data.scan contains a string
-    if (typeof data.scan === 'string' && data.scan) {
-      const overlay = document.createElement('div');
-      overlay.style.position = 'fixed';
-      overlay.style.top = '0';
-      overlay.style.left = '0';
-      overlay.style.width = '100vw';
-      overlay.style.height = '100vh';
-      overlay.style.background = 'rgba(255,0,0,0.85)';
-      overlay.style.zIndex = '2000';
-      overlay.style.display = 'flex';
-      overlay.style.alignItems = 'center';
-      overlay.style.justifyContent = 'center';
-      overlay.innerHTML = `
-        <div style="background:white;padding:2em 3em;border-radius:1em;box-shadow:0 0 20px #900;text-align:center;max-width:90vw;">
-          <h2 style="color:#b00;margin-bottom:1em;">Waarschuwing</h2>
-          <div style="font-size:1.3em;color:#b00;font-weight:bold;">${data.scan}</div>
-          <button style="margin-top:2em;padding:0.5em 2em;font-size:1em;border:none;border-radius:0.5em;background:#b00;color:white;cursor:pointer;" onclick="this.parentElement.parentElement.remove()">Sluiten</button>
-        </div>
-      `;
-      document.body.appendChild(overlay);
-    }
+   
+      // Show warning overlay if data.scan contains a string
+      if (typeof data.scan === 'string' && data.scan) {
+        const overlay = document.createElement('div');
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100vw';
+        overlay.style.height = '100vh';
+        overlay.style.background = 'rgba(255,0,0,0.85)';
+        overlay.style.zIndex = '2000';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.innerHTML = `
+          <div style="background:white;padding:2em 3em;border-radius:1em;box-shadow:0 0 20px #900;text-align:center;max-width:90vw;">
+            <h2 style="color:#b00;margin-bottom:1em;">Waarschuwing</h2>
+            <div style="font-size:1.3em;color:#b00;font-weight:bold;">${data.scan}</div>
+            <button style="margin-top:2em;padding:0.5em 2em;font-size:1em;border:none;border-radius:0.5em;background:#b00;color:white;cursor:pointer;" onclick="this.parentElement.parentElement.remove()">Sluiten</button>
+          </div>
+        `;
+        document.body.appendChild(overlay);
+      }
+  }
 
     // Build vehicle/APK info section if available
     let vehicleInfo = "";
