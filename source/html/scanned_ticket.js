@@ -60,11 +60,19 @@ async function fetchTicketDetails() {
     // Set background to red if any ticket is present
     if (Array.isArray(data.tickets) && data.tickets.some(tt => String(tt.status_presence).toLowerCase().includes('present'))) {
       // Set the background of ticketDetails to light red
+      document.body.style.backgroundColor = 'red';
       const ticketDetailsDiv = document.getElementById('ticketDetails');
       if (ticketDetailsDiv) {
         ticketDetailsDiv.style.backgroundColor = '#ffe5e5'; // light red
       }
     }
+    else {
+      // Reset to default background if no tickets are present
+      document.body.style.backgroundColor = 'green';
+      const ticketDetailsDiv = document.getElementById('ticketDetails');
+      if (ticketDetailsDiv) {
+        ticketDetailsDiv.style.backgroundColor = '#e5ffe5'; // light green
+      }
 
     // Build vehicle/APK info section if available
     let vehicleInfo = "";
