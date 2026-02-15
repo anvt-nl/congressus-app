@@ -36,10 +36,10 @@
             class="inline-flex items-center gap-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-4 rounded-xl shadow-lg hover:shadow-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-300 transform hover:scale-105 font-semibold text-lg"
           >
             <i data-lucide="scan" class="w-6 h-6"></i>
-            Start Scanning
+            Start Scannen
           </button>
           <p class="text-slate-500 text-sm mt-4">
-            Click to activate your camera
+            Klik om je camera te activeren
           </p>
         </div>
 
@@ -53,7 +53,7 @@
             class="w-full flex items-center justify-center gap-2 bg-red-500 text-white px-4 py-3 rounded-lg shadow hover:bg-red-600 transition font-medium"
           >
             <i data-lucide="x-circle" class="w-5 h-5"></i>
-            Stop Scanning
+            Stop Scannen
           </button>
         </div>
       </div>
@@ -69,9 +69,9 @@
             </div>
             <div class="flex-1">
               <h2 class="text-xl font-bold text-slate-900 mb-1">
-                Scan Successful!
+                Scan gelukt!
               </h2>
-              <p class="text-slate-600 text-sm">Here's what we found:</p>
+              <p class="text-slate-600 text-sm">Hier is wat we hebben gevonden:</p>
             </div>
           </div>
 
@@ -83,7 +83,7 @@
               ></i>
               <div class="flex-1 min-w-0">
                 <p class="text-xs text-slate-500 font-medium mb-1">
-                  Scanned Data:
+                  Gescande gegevens:
                 </p>
                 <p
                   id="scanResult"
@@ -99,14 +99,14 @@
               class="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-3 rounded-lg shadow hover:bg-blue-700 transition font-medium"
             >
               <i data-lucide="rotate-cw" class="w-5 h-5"></i>
-              Scan Again
+              Scan Opnieuw
             </button>
             <button
               id="copyBtn"
               class="flex items-center justify-center gap-2 bg-slate-200 text-slate-700 px-4 py-3 rounded-lg shadow hover:bg-slate-300 transition font-medium"
             >
               <i data-lucide="copy" class="w-5 h-5"></i>
-              Copy
+              Kopiëren
             </button>
           </div>
         </div>
@@ -123,40 +123,10 @@
             class="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0"
           ></i>
           <div class="flex-1">
-            <p class="text-red-900 font-semibold mb-1">Error</p>
+            <p class="text-red-900 font-semibold mb-1">Fout</p>
             <p id="errorMessage" class="text-red-700 text-sm"></p>
           </div>
         </div>
-      </div>
-
-      <!-- Instructions -->
-      <div
-        class="bg-white/70 backdrop-blur-sm rounded-xl p-6 border border-white/50 shadow-sm"
-      >
-        <h3 class="font-bold text-slate-900 mb-3 flex items-center gap-2">
-          <i data-lucide="info" class="w-5 h-5 text-blue-600"></i>
-          How to use
-        </h3>
-        <ul class="space-y-2 text-slate-700 text-sm">
-          <li class="flex items-start gap-2">
-            <span class="text-blue-600 font-bold">1.</span>
-            <span
-              >Click the "Start Scanning" button to activate your camera</span
-            >
-          </li>
-          <li class="flex items-start gap-2">
-            <span class="text-blue-600 font-bold">2.</span>
-            <span>Allow camera access when prompted by your browser</span>
-          </li>
-          <li class="flex items-start gap-2">
-            <span class="text-blue-600 font-bold">3.</span>
-            <span>Point your camera at a QR code</span>
-          </li>
-          <li class="flex items-start gap-2">
-            <span class="text-blue-600 font-bold">4.</span>
-            <span>The scan will complete automatically when detected</span>
-          </li>
-        </ul>
       </div>
     </div>
 

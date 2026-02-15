@@ -115,7 +115,7 @@ function onScanSuccess(decodedText, decodedResult) {
     const accessKey = data.id || data.access_key;
 
     if (!accessKey) {
-      showError("Invalid QR Code: Missing 'id' or 'access_key' in JSON.");
+      showError("Ongeldige QR Code: Missing 'id' or 'access_key' in JSON.");
       return;
     }
 
@@ -124,7 +124,7 @@ function onScanSuccess(decodedText, decodedResult) {
       .then((response) => {
         if (!response.ok) {
           if (response.status === 404) {
-            throw new Error("Ticket not found in database.");
+            throw new Error("Ticket niet gevonden in database.");
           }
           throw new Error(`Server error: ${response.status}`);
         }
