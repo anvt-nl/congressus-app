@@ -1,12 +1,4 @@
-// Force reload previous page when going back
-document.getElementById("backToOverviewBtn").onclick = (e) => {
-  e.preventDefault();
-  if (window.history.length > 1) {
-    window.location = document.referrer || "scan.html";
-  } else {
-    window.location = "scan.html";
-  }
-};
+// ...removed backToOverviewBtn handler, as button no longer exists...
 
 // Get event_id and ticket_id from query string
 const params = new URLSearchParams(window.location.search);
