@@ -314,6 +314,24 @@ def refresh_participations(event_id: str, background_tasks: fastapi.BackgroundTa
     }
 
 
+@app.get("/scan-ticket/{event_id}/{obj_id}")
+def scan_ticket(event_id: str, obj_id: str):
+    log(f"Handling GET /scan-ticket/{event_id}/{obj_id}")
+    ticket_data = read_ticket(event_id, obj_id)
+    if ticket_data.get("tickets") is not None:
+        for ticket in ticket_data["tickets"]:
+            if ticket["status_presence"] == "present":
+                ticket["scan"] = "FAILED"
+                break
+        else:
+            log(f"Handling GET /ticket/{event_id}/{obj_id}/present")
+            log(do_update_ticket(event_id, obj_id, "present"))
+            ticket_data["scan"] = "OK"
+    else:
+        ticket_data["scan"] = "FAILED"
+    return ticket_data
+
+
 @app.get("/ticket/{event_id}/{obj_id}")
 def read_ticket(event_id: str, obj_id: str):
     log(f"Handling GET /ticket/{event_id}/{obj_id}")
@@ -344,7 +362,6 @@ def read_ticket(event_id: str, obj_id: str):
                     "merk": apk_row[2],
                     "handelsbenaming": apk_row[3],
                 }
-
     return ticket_data
 
 
