@@ -272,67 +272,6 @@ def get_ticket_by_access_key(access_key: str):
             )
 
 
-## Database browser endpoints for debugging - remove in production - BEGIN
-@app.get("/api/database/tables")
-def get_database_tables():
-    """List all user tables in the database."""
-    with sqlite3.connect(DB_PATH, timeout=30) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';"
-        )
-        tables = [row[0] for row in cursor.fetchall()]
-    return {"tables": tables}
-
-
-@app.get("/api/database/{table_name}")
-def get_table_data(table_name: str, limit: int = 100, offset: int = 0):
-    """Get data rows for a specific table."""
-    # Sanitize table name (basic check)
-    if not table_name.isidentifier():
-        return fastapi.responses.JSONResponse(
-            status_code=400, content={"message": "Invalid table name"}
-        )
-
-    with sqlite3.connect(DB_PATH, timeout=30) as conn:
-        cursor = conn.cursor()
-        # Verify table exists to prevent SQL injection via table name
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-            (table_name,),
-        )
-        if not cursor.fetchone():
-            return fastapi.responses.JSONResponse(
-                status_code=404, content={"message": f"Table {table_name} not found"}
-            )
-
-        # Get columns
-        cursor.execute(f"PRAGMA table_info({table_name})")
-        columns = [col[1] for col in cursor.fetchall()]
-
-        # Get data
-        query = f"SELECT * FROM {table_name} LIMIT ? OFFSET ?"
-        cursor.execute(query, (limit, offset))
-        rows = cursor.fetchall()
-        data = [dict(zip(columns, row)) for row in rows]
-
-        # Get total count
-        cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
-        total = cursor.fetchone()[0]
-
-    return {
-        "table": table_name,
-        "columns": columns,
-        "data": data,
-        "total": total,
-        "limit": limit,
-        "offset": offset,
-    }
-
-
-## Database browser endpoints for debugging - END
-
-
 @app.get("/events")
 def read_events():
     log("Handling GET /events")
