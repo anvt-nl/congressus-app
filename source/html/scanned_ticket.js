@@ -43,27 +43,25 @@ async function fetchTicketDetails() {
                 const presenceText =
                   tt.status_presence === "present" ? "ja" : "nee";
 
-                // Check if this ticket is the one scanned
-                const urlParams = new URLSearchParams(window.location.search);
-                const highlightKey = urlParams.get("highlight_key");
-                const isHighlighted =
-                  highlightKey &&
-                  (tt.access_key === highlightKey || tt.id === highlightKey);
-                const rowClass = isHighlighted
-                  ? "bg-yellow-100 border-l-4 border-yellow-500"
-                  : "cursor-pointer hover:bg-blue-100";
+                // Always use default row class, no highlight
+                const rowClass = "cursor-pointer hover:bg-blue-100";
 
                 return `
-							<tr class='${rowClass}' onclick='showPresenceOverlay(${idx})'>
-								<td class="px-3 py-2">${tt.ticket_type || "-"}</td>
-								<td class="px-3 py-2">${presenceText}</td>
-							</tr>
-							`;
+              <tr class='${rowClass}'>
+                <td class="px-3 py-2">${tt.ticket_type || "-"}</td>
+                <td class="px-3 py-2">${presenceText}</td>
+              </tr>
+              `;
               })
               .join("")}
 					</tbody>
 				</table>
 			</div>`;
+    }
+
+    // Set background to red if any ticket is present
+    if (Array.isArray(data.tickets) && data.tickets.some(tt => String(tt.status_presence).toLowerCase().includes('present'))) {
+      document.body.style.backgroundColor = 'red';
     }
 
     // Build vehicle/APK info section if available
@@ -128,50 +126,3 @@ async function fetchTicketDetails() {
   }
 }
 fetchTicketDetails();
-
-// Overlay logic
-window.showPresenceOverlay = (idx) => {
-  const ticket = window._ticketData.tickets[idx];
-  const overlay = document.getElementById("presenceOverlay");
-  const body = document.getElementById("presenceOverlayBody");
-  if (!ticket) return;
-  body.innerHTML = `
-		<div class="mb-4 font-bold">Wijzig aanwezigheid voor: ${ticket.ticket_type || "-"}</div>
-		<form id="presenceForm">
-			<label class="block mb-2">
-				<input type="radio" name="status_presence" value="present" ${ticket.status_presence === "present" ? "checked" : ""}> Aanwezig
-			</label>
-			<label class="block mb-2">
-				<input type="radio" name="status_presence" value="unknown" ${!ticket.status_presence || ticket.status_presence === "unknown" ? "checked" : ""}> Afwezig
-			</label>
-			<button type="submit" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Opslaan</button>
-		</form>
-	`;
-  overlay.style.display = "flex";
-  document.getElementById("presenceForm").onsubmit = async (e) => {
-    e.preventDefault();
-    const form = e.target;
-    const newStatus = form.status_presence.value;
-    if (window._ticketData.tickets[idx].status_presence !== newStatus) {
-      const confirmed = confirm(
-        "Weet je zeker dat je de aanwezigheid wilt aanpassen?",
-      );
-      if (!confirmed) return;
-    }
-    // Update local data and re-render
-    window._ticketData.tickets[idx].status_presence = newStatus;
-    hidePresenceOverlay();
-    // Send update to backend
-    try {
-      await fetch(`/ticket/${eventId}/${ticketId}/${newStatus}`, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
-    } catch (e) {}
-    // Always refresh data from backend after update
-    fetchTicketDetails();
-  };
-};
-window.hidePresenceOverlay = () => {
-  document.getElementById("presenceOverlay").style.display = "none";
-};
