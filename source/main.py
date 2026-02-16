@@ -57,6 +57,7 @@ import httpx
 import pandas as pd
 from fastapi import File, UploadFile
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 
 # from fastapi import Request
 # from fastapi.responses import StreamingResponse
@@ -78,6 +79,14 @@ headers = {"Authorization": f"Bearer {api_access_key}"}
 
 app = fastapi.FastAPI()
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+# CORS: Allow all origins (safe for local dev, restrict in prod if nodig)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 HTTP_CLIENT = httpx.Client(headers=headers, timeout=10)
 
 
