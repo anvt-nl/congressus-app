@@ -206,6 +206,15 @@ def init_db():
             )
         """
         )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS members (
+                member_id TEXT PRIMARY KEY,
+                data TEXT,
+                last_updated TEXT
+            )
+        """
+        )
 
         try:
             migrate_tickets_schema(cursor)
@@ -476,6 +485,12 @@ async def upload_kenteken(file: UploadFile = File(...)):
     except Exception as e:
         log(f"Error processing file: {str(e)}")
         return {"status": "error", "message": f"Error processing file: {str(e)}"}
+
+
+@app.get("/members")
+def get_members_online():
+    members = get_members()
+    return members
 
 
 @app.get("/kentekens")
@@ -821,6 +836,7 @@ def get_participations(event_id: int, force_refresh: bool = False):
             )
 
     # Filter fields to reduce payload size
+    members = get_members()
     filtered_participations = []
     allowed_fields = [
         "id",
@@ -832,8 +848,35 @@ def get_participations(event_id: int, force_refresh: bool = False):
         "tickets",
         "kenteken",
     ]
+    valid_statuses = {"Lid (Geen verloopdatum)", "Ere-lid"}
+    today = datetime.now().date()
     for p in participations:
         filtered_participations.append({k: p.get(k) for k in allowed_fields})
+        member_id = str(p.get("member_id")) if p.get("member_id") is not None else None
+        if member_id is not None:
+            member_info = members.get(member_id)
+            member_to_date = member_info.get("member_to") if member_info else None
+
+            if member_to_date:
+                try:
+                    member_to_date = datetime.strptime(member_to_date, "%Y-%m-%d").date()
+                except ValueError:
+                    log(f"Invalid date format for member_id {member_id}: {member_to_date}")
+                    member_to_date = None
+
+            member_status = member_info.get("name") if member_info else None
+            if member_to_date and member_to_date >= today:
+                filtered_participations[-1]["lid_valid"] = True
+                filtered_participations[-1]["lid_status"] = member_status
+            elif member_status in valid_statuses:
+                filtered_participations[-1]["lid_valid"] = True
+                filtered_participations[-1]["lid_status"] = member_status
+            else:
+                filtered_participations[-1]["lid_valid"] = False
+                filtered_participations[-1]["lid_status"] = member_status
+
+
+
 
     return filtered_participations
 
@@ -1115,6 +1158,82 @@ def do_check_apk_status(event_id: str):
         )
 
     return {"checked": checked, "skipped": skipped, "errors": errors}
+
+
+def get_members():
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
+        # Table creation moved to init_db
+
+        cursor.execute("SELECT data FROM members WHERE member_id = 'all'")
+        row = cursor.fetchone()
+        if row:
+            # When data is too old (older than 1 day), refresh it
+            last_updated_str = json.loads(row[0])['last_updated']
+            now = time.strftime("%Y-%m-%d")
+            if last_updated_str == now:
+                log("Members found in DB.")
+                return json.loads(row[0])
+
+            log("Data is outdated. Fetching new data from API...")
+        log("No members found in DB. Fetching from API...")
+        members = get_members_remote()
+        cursor.execute("DELETE FROM members WHERE member_id = 'all'")
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO members (member_id, data, last_updated)
+            VALUES (?, ?, ?)
+        """,
+            (
+                "all",
+                json.dumps(members),
+                time.strftime("%Y-%m-%d"),
+            ),
+        )
+        conn.commit()
+        log("Members stored in DB.")
+        return members
+
+
+def get_members_remote():
+    has_next = True
+    params = {
+        'page_size': 100,
+        'page': 1
+    }
+    url = f'{API_URL}/members'
+    data = []
+    while has_next:
+        resp = httpx.get(url, params=params, headers=headers, timeout=10)
+        resp.raise_for_status()
+
+        data += resp.json().get('data', [])
+        has_next = resp.json().get('has_next', False)
+        if has_next:
+            params['page'] = resp.json().get('next_num', params['page'] + 1)
+    members = {}
+
+    for member in data:
+        status = member.get('status', {})
+        if not status:
+            continue
+        id = member.get('id', None)
+        member_to = status.get('member_to', 'N/A')
+        if not member_to:
+            member_to = 'N/A'
+        name = status.get('name', None)
+        if not id:
+            print(f"Missing id for member: {name}")
+            continue
+        members[id] = {
+            'name': name,
+            'member_to': member_to
+        }
+    now = time.strftime('%Y-%m-%d')
+    members['last_updated'] = now
+    return members
+    
+
 
 
 def log(message: str = ""):

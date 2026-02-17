@@ -226,9 +226,14 @@ function renderSubTable(title, rows) {
     const trOnClick = isApproved
       ? `onclick="window.location.href='ticket.html?event_id=${eventId}&ticket_id=${ticketId}'"`
       : "";
-    html += `<tr class="${trClass}" ${trOnClick}>
-            <td class="px-2 py-2 truncate max-w-[120px]" title="${p.addressee}">${p.addressee || ""}</td>
-            <td class="px-2 py-2 truncate max-w-[120px]" title="${p.email}">${p.email || ""}</td>`;
+        // Determine style for member name if lid_valid is false
+        let nameCellStyle = "";
+        if (p.lid_valid === false) {
+          nameCellStyle = "background-color: red; color: white; padding: 2px 6px; border-radius: 4px;";
+        }
+        html += `<tr class="${trClass}" ${trOnClick}>
+          <td class="px-2 py-2 truncate max-w-[120px]" title="${p.addressee}"${nameCellStyle ? ` style='${nameCellStyle}'` : ''}>${p.addressee || ""}</td>
+          <td class="px-2 py-2 truncate max-w-[120px]" title="${p.email}">${p.email || ""}</td>`;
     // Add APK styling to kenteken cell
     const apkData = apkStatusData[ticketId];
     let apkBgColor = "";
