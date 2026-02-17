@@ -114,38 +114,6 @@ def normalize_kenteken(kenteken: str) -> str:
     return kenteken
 
 
-def migrate_tickets_schema(cursor):
-    # Check if access_key column exists
-    cursor.execute("PRAGMA table_info(tickets)")
-    columns = [info[1] for info in cursor.fetchall()]
-    if "access_key" not in columns:
-        print("Migrating tickets table: adding access_key column...")
-        cursor.execute("ALTER TABLE tickets ADD COLUMN access_key TEXT")
-
-        # Populate existing records
-        print("Populating access_key for existing tickets...")
-        cursor.execute("SELECT obj_id, data FROM tickets")
-        rows = cursor.fetchall()
-        updated_count = 0
-        for obj_id, data_str in rows:
-            try:
-                data = json.loads(data_str)
-                # Use access_key from the first ticket if available (this is what the scanner sees)
-                if data.get("tickets") and len(data.get("tickets")) > 0:
-                    access_key = data["tickets"][0].get("access_key")
-                else:
-                    access_key = data.get("access_key")
-                if access_key:
-                    cursor.execute(
-                        "UPDATE tickets SET access_key = ? WHERE obj_id = ?",
-                        (access_key, obj_id),
-                    )
-                    updated_count += 1
-            except json.JSONDecodeError:
-                continue
-        print(f"Migrated {updated_count} tickets with access_key.")
-
-
 def init_db():
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
         cursor = conn.cursor()
@@ -215,12 +183,6 @@ def init_db():
             )
         """
         )
-
-        try:
-            migrate_tickets_schema(cursor)
-        except Exception as e:
-            print(f"Migration failed: {e}")
-
         conn.commit()
 
 
