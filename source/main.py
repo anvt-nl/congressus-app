@@ -299,6 +299,7 @@ def refresh_participations(event_id: str, background_tasks: fastapi.BackgroundTa
 def scan_ticket(event_id: str, obj_id: str):
     log(f"Handling GET /scan-ticket/{event_id}/{obj_id}")
     ticket_data = read_ticket(event_id, obj_id)
+    log(json.dumps(ticket_data, indent=4))
     event_date_str = ticket_data.get("event_date")
     # only allow scanning is event date differs max 7 days from current date
     if event_date_str:
@@ -306,6 +307,14 @@ def scan_ticket(event_id: str, obj_id: str):
         if (event_date - datetime.now()).days > 3 or (datetime.now() - event_date).days > MAX_SCAN_DAYS:
             ticket_data["scan"] = f"Scannen niet toegestaan: evenement is meer dan {MAX_SCAN_DAYS} dagen geleden of 3 dagen in de toekomst"
             return ticket_data
+    if ticket_data.get("member_id") is not None:
+        members = get_members()
+        member_info = members.get(str(ticket_data["member_id"]))
+        if validate_member_data(member_info["name"], member_info["member_to"], event_date_str):
+            ticket_data["scan"] = "OK"
+        else:
+            ticket_data["scan"] = f"Lidmaatschap niet geldig op {event_date_str[:10]}"
+        return ticket_data
     if ticket_data.get("tickets") is not None:
         for ticket in ticket_data["tickets"]:
             if ticket["status_presence"] == "present":
@@ -810,36 +819,19 @@ def get_participations(event_id: int, force_refresh: bool = False):
         "tickets",
         "kenteken",
     ]
-    valid_statuses = {"Lid (Geen verloopdatum)", "Ere-lid"}
-    today = datetime.now().date()
+    event_date_str = get_event(event_id).get("start")
     for p in participations:
         filtered_participations.append({k: p.get(k) for k in allowed_fields})
         member_id = str(p.get("member_id")) if p.get("member_id") is not None else None
         if member_id is not None:
             member_info = members.get(member_id)
             member_to_date = member_info.get("member_to") if member_info else None
-
-            if member_to_date:
-                try:
-                    member_to_date = datetime.strptime(member_to_date, "%Y-%m-%d").date()
-                except ValueError:
-                    log(f"Invalid date format for member_id {member_id}: {member_to_date}")
-                    member_to_date = None
-
-            member_status = member_info.get("name") if member_info else None
-            if member_to_date and member_to_date >= today:
-                filtered_participations[-1]["lid_valid"] = True
-                filtered_participations[-1]["lid_status"] = member_status
-            elif member_status in valid_statuses:
-                filtered_participations[-1]["lid_valid"] = True
-                filtered_participations[-1]["lid_status"] = member_status
-            else:
-                filtered_participations[-1]["lid_valid"] = False
-                filtered_participations[-1]["lid_status"] = member_status
-
-
-
-
+            member_type = member_info.get("name", None) if member_info else None
+            filtered_participations[-1]["lid_valid"] = validate_member_data(
+                member_type,
+                member_to_date,
+                event_date_str
+            )
     return filtered_participations
 
 
@@ -912,6 +904,7 @@ def filter_tickets(tickets_list: Dict) -> Dict:
 
     return_list = {
         "id": tickets_list.get("id", ""),
+        "member_id": tickets_list.get("member_id", None),
         "addressee": tickets_list.get("addressee", ""),
         "email": tickets_list.get("email", ""),
         "event_name": tickets_list.get("event", "").get("name", ""),
@@ -1157,6 +1150,33 @@ def get_members():
         return members
 
 
+def validate_member_data(member_name: str, member_to_str: str, date_str: str) -> bool:
+    """
+    This function validates is a member has a valid membership.
+
+    :param member_name: Type of membership (e.g. "Lid", "Lid (Geen verloopdatum)", "Ere-lid", etc.)
+    :param member_to_str: The date until the membership is valid, in string format (e.g. "2024-12-31"). Can be empty or None if no date is provided.
+    :param date_str: The date the membership should be valid for.
+
+    :return: A boolean indicating whether the membership is valid.
+    :rtype: bool
+    """
+
+    valid_status = False
+    valid_statuses = {"Lid (Geen verloopdatum)", "Ere-lid"}
+    member_to_date = datetime.strptime(member_to_str, "%Y-%m-%d").date() if member_to_str and member_to_str != "N/A" else None
+    log(f"date_str: {date_str}, type: {type(date_str)}")
+    if "T" in date_str:
+        date_str = date_str.split("T")[0]
+    date_date = datetime.strptime(date_str, "%Y-%m-%d").date() if date_str and date_str != "N/A" else None
+    if member_to_date and member_to_date >= date_date:
+        valid_status = True
+    elif member_name in valid_statuses:
+        valid_status = True
+
+    return valid_status
+
+
 def get_members_remote():
     has_next = True
     params = {
@@ -1194,8 +1214,6 @@ def get_members_remote():
     now = time.strftime('%Y-%m-%d')
     members['last_updated'] = now
     return members
-    
-
 
 
 def log(message: str = ""):
