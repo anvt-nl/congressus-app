@@ -56,8 +56,8 @@ import fastapi
 import httpx
 import pandas as pd
 from fastapi import File, UploadFile
-from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 # from fastapi import Request
 # from fastapi.responses import StreamingResponse
@@ -304,13 +304,19 @@ def scan_ticket(event_id: str, obj_id: str):
     # only allow scanning is event date differs max 7 days from current date
     if event_date_str:
         event_date = datetime.strptime(event_date_str, "%Y-%m-%dT%H:%M:%S")
-        if (event_date - datetime.now()).days > 3 or (datetime.now() - event_date).days > MAX_SCAN_DAYS:
-            ticket_data["scan"] = f"Scannen niet toegestaan: evenement is meer dan {MAX_SCAN_DAYS} dagen geleden of 3 dagen in de toekomst"
+        if (event_date - datetime.now()).days > 3 or (
+            datetime.now() - event_date
+        ).days > MAX_SCAN_DAYS:
+            ticket_data["scan"] = (
+                f"Scannen niet toegestaan: evenement is meer dan {MAX_SCAN_DAYS} dagen geleden of 3 dagen in de toekomst"
+            )
             return ticket_data
     if ticket_data.get("member_id") is not None:
         members = get_members()
         member_info = members.get(str(ticket_data["member_id"]))
-        if validate_member_data(member_info["name"], member_info["member_to"], event_date_str):
+        if validate_member_data(
+            member_info["name"], member_info["member_to"], event_date_str
+        ):
             ticket_data["scan"] = "OK"
         else:
             ticket_data["scan"] = f"Lidmaatschap niet geldig op {event_date_str[:10]}"
@@ -828,9 +834,7 @@ def get_participations(event_id: int, force_refresh: bool = False):
             member_to_date = member_info.get("member_to") if member_info else None
             member_type = member_info.get("name", None) if member_info else None
             filtered_participations[-1]["lid_valid"] = validate_member_data(
-                member_type,
-                member_to_date,
-                event_date_str
+                member_type, member_to_date, event_date_str
             )
     return filtered_participations
 
@@ -1069,7 +1073,8 @@ def do_check_apk_status(event_id: str):
 
                 # Query RDW API
                 url = f"https://opendata.rdw.nl/resource/m9d7-ebf2.json?kenteken={kenteken_no_dash}"
-                resp = HTTP_CLIENT.get(url)
+                rdw_headers = {"User-Agent": "CongressusApp/1.0"}
+                resp = httpx.get(url, headers=rdw_headers, timeout=10)
                 resp.raise_for_status()
 
                 data = resp.json()
@@ -1124,7 +1129,7 @@ def get_members():
         row = cursor.fetchone()
         if row:
             # When data is too old (older than 1 day), refresh it
-            last_updated_str = json.loads(row[0])['last_updated']
+            last_updated_str = json.loads(row[0])["last_updated"]
             now = time.strftime("%Y-%m-%d")
             if last_updated_str == now:
                 log("Members found in DB.")
@@ -1164,11 +1169,19 @@ def validate_member_data(member_name: str, member_to_str: str, date_str: str) ->
 
     valid_status = False
     valid_statuses = {"Lid (Geen verloopdatum)", "Ere-lid"}
-    member_to_date = datetime.strptime(member_to_str, "%Y-%m-%d").date() if member_to_str and member_to_str != "N/A" else None
+    member_to_date = (
+        datetime.strptime(member_to_str, "%Y-%m-%d").date()
+        if member_to_str and member_to_str != "N/A"
+        else None
+    )
     log(f"date_str: {date_str}, type: {type(date_str)}")
     if "T" in date_str:
         date_str = date_str.split("T")[0]
-    date_date = datetime.strptime(date_str, "%Y-%m-%d").date() if date_str and date_str != "N/A" else None
+    date_date = (
+        datetime.strptime(date_str, "%Y-%m-%d").date()
+        if date_str and date_str != "N/A"
+        else None
+    )
     if member_to_date and member_to_date >= date_date:
         valid_status = True
     elif member_name in valid_statuses:
@@ -1179,40 +1192,34 @@ def validate_member_data(member_name: str, member_to_str: str, date_str: str) ->
 
 def get_members_remote():
     has_next = True
-    params = {
-        'page_size': 100,
-        'page': 1
-    }
-    url = f'{API_URL}/members'
+    params = {"page_size": 100, "page": 1}
+    url = f"{API_URL}/members"
     data = []
     while has_next:
         resp = httpx.get(url, params=params, headers=headers, timeout=10)
         resp.raise_for_status()
 
-        data += resp.json().get('data', [])
-        has_next = resp.json().get('has_next', False)
+        data += resp.json().get("data", [])
+        has_next = resp.json().get("has_next", False)
         if has_next:
-            params['page'] = resp.json().get('next_num', params['page'] + 1)
+            params["page"] = resp.json().get("next_num", params["page"] + 1)
     members = {}
 
     for member in data:
-        status = member.get('status', {})
+        status = member.get("status", {})
         if not status:
             continue
-        id = member.get('id', None)
-        member_to = status.get('member_to', 'N/A')
+        id = member.get("id", None)
+        member_to = status.get("member_to", "N/A")
         if not member_to:
-            member_to = 'N/A'
-        name = status.get('name', None)
+            member_to = "N/A"
+        name = status.get("name", None)
         if not id:
             print(f"Missing id for member: {name}")
             continue
-        members[id] = {
-            'name': name,
-            'member_to': member_to
-        }
-    now = time.strftime('%Y-%m-%d')
-    members['last_updated'] = now
+        members[id] = {"name": name, "member_to": member_to}
+    now = time.strftime("%Y-%m-%d")
+    members["last_updated"] = now
     return members
 
 
