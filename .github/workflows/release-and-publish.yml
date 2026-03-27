@@ -103,7 +103,7 @@ jobs:
 
       # --- STEP 3: GENERATE SBOM (After Push) ---
       - name: Generate SBOM
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: image
           format: cyclonedx
