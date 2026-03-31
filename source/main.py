@@ -232,6 +232,51 @@ async def html_page(page_name: str) -> fastapi.responses.HTMLResponse:
     return fastapi.responses.Response(status_code=404, content="Page not found")
 
 
+@app.get("/admin/tables")
+def get_tables():
+    """
+    Get list of manageable tables in the database.
+    """
+    return ["events", "participations", "tickets", "kentekens", "apk_status", "members"]
+
+
+@app.post("/admin/clear-table/{table_name}")
+def clear_table(table_name: str):
+    """
+    Clear all records from a specific table.
+    """
+    allowed_tables = [
+        "events",
+        "participations",
+        "tickets",
+        "kentekens",
+        "apk_status",
+        "members",
+    ]
+    if table_name not in allowed_tables:
+        return fastapi.responses.JSONResponse(
+            status_code=400,
+            content={"status": "error", "message": f"Invalid table name: {table_name}"},
+        )
+
+    log(f"Admin: Clearing table {table_name}")
+    try:
+        with sqlite3.connect(DB_PATH, timeout=30) as conn:
+            cursor = conn.cursor()
+            cursor.execute(f"DELETE FROM {table_name}")
+            conn.commit()
+        return {
+            "status": "success",
+            "message": f"Table {table_name} cleared successfully.",
+        }
+    except Exception as e:
+        log(f"Error clearing table {table_name}: {str(e)}")
+        return fastapi.responses.JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": f"Error clearing table: {str(e)}"},
+        )
+
+
 @app.get("/ticket/by-access-key/{access_key}")
 def get_ticket_by_access_key(access_key: str):
     """
@@ -298,7 +343,7 @@ def refresh_participations(event_id: str, background_tasks: fastapi.BackgroundTa
 @app.get("/scan-ticket/{event_id}/{obj_id}")
 def scan_ticket(event_id: str, obj_id: str):
     log(f"Handling GET /scan-ticket/{event_id}/{obj_id}")
-    ticket_data = read_ticket(event_id, obj_id)
+    ticket_data = read_ticket(event_id, obj_id, refresh=True)
     log(json.dumps(ticket_data, indent=4))
     event_date_str = ticket_data.get("event_date")
     # only allow scanning is event date differs max 7 days from current date
@@ -317,21 +362,24 @@ def scan_ticket(event_id: str, obj_id: str):
         if validate_member_data(
             member_info["name"], member_info["member_to"], event_date_str
         ):
-            ticket_data["scan"] = "OK"
+            log(f"Member validation succeeded for participation {obj_id}")
         else:
             ticket_data["scan"] = f"Lidmaatschap niet geldig op {event_date_str[:10]}"
-        return ticket_data
-    if ticket_data.get("tickets") is not None:
+            return ticket_data
+    if ticket_data.get("tickets"):
         for ticket in ticket_data["tickets"]:
-            if ticket["status_presence"] == "present":
+            if ticket.get("status_presence") == "present":
                 ticket_data["scan"] = "Ticket is al gescand"
                 break
         else:
             log(f"Handling GET /ticket/{event_id}/{obj_id}/present")
-            ticket_data = do_update_ticket(event_id, obj_id, "present")
-            if ticket_data.get("error"):
-                ticket_data["scan"] = "Fout bij scannen: " + ticket_data["error"]
+            updated_ticket_data = do_update_ticket(event_id, obj_id, "present")
+            if updated_ticket_data.get("status") == "error":
+                ticket_data["scan"] = "Fout bij scannen: " + updated_ticket_data.get(
+                    "message", "onbekende fout"
+                )
             else:
+                ticket_data = updated_ticket_data
                 ticket_data["scan"] = "OK"
     else:
         ticket_data["scan"] = "Ticket is niet beschikbaar"
@@ -339,9 +387,9 @@ def scan_ticket(event_id: str, obj_id: str):
 
 
 @app.get("/ticket/{event_id}/{obj_id}")
-def read_ticket(event_id: str, obj_id: str):
+def read_ticket(event_id: str, obj_id: str, refresh: bool = False):
     log(f"Handling GET /ticket/{event_id}/{obj_id}")
-    ticket_data = get_ticket(event_id, obj_id)
+    ticket_data = get_ticket(event_id, obj_id, refresh=refresh)
 
     # Add APK data if kenteken exists
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
@@ -378,7 +426,9 @@ def update_ticket(event_id: str, obj_id: str, new_status: str):
 
 
 @app.post("/upload-kenteken")
-async def upload_kenteken(file: UploadFile = File(...)):
+async def upload_kenteken(
+    background_tasks: fastapi.BackgroundTasks, file: UploadFile = File(...)
+):
     """
     Upload an Excel file containing kenteken (license plate) data.
     Expected columns: 'Deelname-ID' and 'Kenteken' in sheet 'Deelnemers'
@@ -410,6 +460,7 @@ async def upload_kenteken(file: UploadFile = File(...)):
         added = 0
         duplicates = 0
         errors = []
+        processed_participation_ids = set()
 
         with sqlite3.connect(DB_PATH, timeout=30) as conn:
             cursor = conn.cursor()
@@ -432,6 +483,7 @@ async def upload_kenteken(file: UploadFile = File(...)):
 
                     # Normalize kenteken
                     kenteken = normalize_kenteken(str(kenteken))
+                    processed_participation_ids.add(deelname_id)
 
                     # Check if already exists
                     cursor.execute(
@@ -450,13 +502,33 @@ async def upload_kenteken(file: UploadFile = File(...)):
 
             conn.commit()
 
+        event_ids = []
+        if processed_participation_ids:
+            with sqlite3.connect(DB_PATH, timeout=30) as conn:
+                cursor = conn.cursor()
+                placeholders = ",".join("?" for _ in processed_participation_ids)
+                cursor.execute(
+                    f"""
+                    SELECT DISTINCT event_id FROM participations
+                    WHERE participation_id IN ({placeholders})
+                """,
+                    tuple(processed_participation_ids),
+                )
+                event_ids = [row[0] for row in cursor.fetchall() if row[0]]
+
+        for event_id in event_ids:
+            background_tasks.add_task(do_check_apk_status, event_id)
+
         log(f"Upload complete: {added} added, {duplicates} duplicates")
+        if event_ids:
+            log(f"Started APK background check for event(s): {', '.join(event_ids)}")
         return {
             "status": "success",
             "added": added,
             "duplicates": duplicates,
             "total": added + duplicates,
             "errors": errors,
+            "apk_checks_started": event_ids,
         }
 
     except Exception as e:
@@ -921,30 +993,19 @@ def filter_tickets(tickets_list: Dict) -> Dict:
 
 def do_update_ticket(event_id: str, obj_id: str, new_status: str):
     log(f"New status: {new_status}")
-    with sqlite3.connect(DB_PATH, timeout=30) as conn:
-        cursor = conn.cursor()
+    ticket_data = get_ticket(event_id, obj_id, refresh=True)
+    if not ticket_data.get("tickets"):
+        return {"status": "error", "message": f"Ticket {obj_id} not found."}
 
-        cursor.execute(
-            """
-            SELECT data FROM tickets WHERE obj_id = ? AND event_id = ?
-        """,
-            (obj_id, event_id),
-        )
-
-        row = cursor.fetchone()
-        if not row:
-            return {"status": "error", "message": f"Ticket {obj_id} not found."}
-
-        json_data = json.loads(row[0])
-        for ticket in json_data.get("tickets", []):
-            if ticket["status_presence"] == new_status:
-                log(
-                    f"Ticket {ticket['id']} already has status_presence {new_status}. No update needed."
-                )
-                return {
-                    "status": "success",
-                    "message": f"Ticket {obj_id} already has status_presence {new_status}.",
-                }
+    for ticket in ticket_data["tickets"]:
+        if ticket.get("status_presence") == new_status:
+            log(
+                f"Ticket {ticket['id']} already has status_presence {new_status}. No update needed."
+            )
+            return {
+                "status": "success",
+                "message": f"Ticket {obj_id} already has status_presence {new_status}.",
+            }
 
     # https://api.congressus.nl/v30/events/{event_id}/participations/{obj_id}/set-presence
     url = f"{API_URL}/events/{event_id}/participations/{obj_id}/set-presence"

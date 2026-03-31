@@ -65,8 +65,32 @@ async function uploadFile() {
           li.textContent = error;
           errorsList.appendChild(li);
         });
+        if (
+          Array.isArray(result.apk_checks_started) &&
+          result.apk_checks_started.length > 0
+        ) {
+          const li = document.createElement("li");
+          li.textContent =
+            "APK controle automatisch gestart voor evenement(en): " +
+            result.apk_checks_started.join(", ");
+          errorsList.appendChild(li);
+        }
       } else {
-        document.getElementById("errorsSection").classList.add("hidden");
+        if (
+          Array.isArray(result.apk_checks_started) &&
+          result.apk_checks_started.length > 0
+        ) {
+          document.getElementById("errorsSection").classList.remove("hidden");
+          const errorsList = document.getElementById("errorsList");
+          errorsList.innerHTML = "";
+          const li = document.createElement("li");
+          li.textContent =
+            "APK controle automatisch gestart voor evenement(en): " +
+            result.apk_checks_started.join(", ");
+          errorsList.appendChild(li);
+        } else {
+          document.getElementById("errorsSection").classList.add("hidden");
+        }
       }
     } else {
       // Show error
