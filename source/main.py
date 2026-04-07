@@ -54,8 +54,6 @@ from typing import Dict, List
 
 import fastapi
 import httpx
-import pandas as pd
-from fastapi import File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
@@ -425,117 +423,6 @@ def update_ticket(event_id: str, obj_id: str, new_status: str):
     return do_update_ticket(event_id, obj_id, new_status)
 
 
-@app.post("/upload-kenteken")
-async def upload_kenteken(
-    background_tasks: fastapi.BackgroundTasks, file: UploadFile = File(...)
-):
-    """
-    Upload an Excel file containing kenteken (license plate) data.
-    Expected columns: 'Deelname-ID' and 'Kenteken' in sheet 'Deelnemers'
-    Returns: JSON with added, duplicates, total, and errors counts
-    """
-    log(f"Handling POST /upload-kenteken with file: {file.filename}")
-
-    # Validate file type
-    if not file.filename.endswith((".xlsx", ".xls")):
-        return {
-            "status": "error",
-            "message": "Invalid file type. Please upload an Excel file (.xlsx or .xls)",
-        }
-
-    try:
-        # Read Excel file
-        contents = await file.read()
-        df = pd.read_excel(contents, sheet_name="Deelnemers")
-
-        # Validate required columns
-        if "Deelname-ID" not in df.columns or (
-            "Kenteken" not in df.columns and "Kenteken:" not in df.columns
-        ):
-            return {
-                "status": "error",
-                "message": "Missing required columns. Expected 'Deelname-ID' and 'Kenteken' columns in 'Deelnemers' sheet",
-            }
-
-        added = 0
-        duplicates = 0
-        errors = []
-        processed_participation_ids = set()
-
-        with sqlite3.connect(DB_PATH, timeout=30) as conn:
-            cursor = conn.cursor()
-
-            for _, row in df.iterrows():
-                try:
-                    deelname_id = row["Deelname-ID"]
-                    if pd.isna(deelname_id):
-                        continue
-
-                    deelname_id = str(int(deelname_id))
-
-                    # Get kenteken from either "Kenteken" or "Kenteken:" column
-                    kenteken = row.get("Kenteken")
-                    if pd.isna(kenteken):
-                        kenteken = row.get("Kenteken:")
-
-                    if pd.isna(kenteken):
-                        continue
-
-                    # Normalize kenteken
-                    kenteken = normalize_kenteken(str(kenteken))
-                    processed_participation_ids.add(deelname_id)
-
-                    # Check if already exists
-                    cursor.execute(
-                        "SELECT id FROM kentekens WHERE id = ?", (deelname_id,)
-                    )
-                    if cursor.fetchone():
-                        duplicates += 1
-                    else:
-                        cursor.execute(
-                            "INSERT INTO kentekens (id, kenteken) VALUES (?, ?)",
-                            (deelname_id, kenteken),
-                        )
-                        added += 1
-                except Exception as e:
-                    errors.append(f"Row error: {str(e)}")
-
-            conn.commit()
-
-        event_ids = []
-        if processed_participation_ids:
-            with sqlite3.connect(DB_PATH, timeout=30) as conn:
-                cursor = conn.cursor()
-                placeholders = ",".join("?" for _ in processed_participation_ids)
-                cursor.execute(
-                    f"""
-                    SELECT DISTINCT event_id FROM participations
-                    WHERE participation_id IN ({placeholders})
-                """,
-                    tuple(processed_participation_ids),
-                )
-                event_ids = [row[0] for row in cursor.fetchall() if row[0]]
-
-        for event_id in event_ids:
-            background_tasks.add_task(do_check_apk_status, event_id)
-
-        log(f"Upload complete: {added} added, {duplicates} duplicates")
-        if event_ids:
-            log(f"Started APK background check for event(s): {', '.join(event_ids)}")
-        return {
-            "status": "success",
-            "added": added,
-            "duplicates": duplicates,
-            "total": added + duplicates,
-            "errors": errors,
-            "apk_checks_started": event_ids,
-        }
-
-    except Exception as e:
-        log(f"Error processing file: {str(e)}")
-        return {"status": "error", "message": f"Error processing file: {str(e)}"}
-
-
 @app.get("/members")
 def get_members_online():
     members = get_members()
@@ -813,6 +700,7 @@ def get_participations(event_id: int, force_refresh: bool = False):
                     else:
                         return obj
 
+                print(participation)
                 participation = strip_values(participation)
                 participation_id = participation["id"]
                 cursor.execute(
@@ -946,6 +834,30 @@ def get_ticket(event_id: str, obj_id: str, refresh: bool = False):
                 access_key = data["tickets"][0].get("access_key")
             else:
                 access_key = data.get("access_key")
+            # Extract kenteken from ticket form entry data
+            extracted_kenteken = None
+            if data.get("tickets"):
+                for ticket in data["tickets"]:
+                    form_data = ticket.get("form_entry_data", {})
+                    # Check for member and non-member kenteken fields
+                    for field in ["custom_form_field_38585", "custom_form_field_36056"]:
+                        if form_data.get(field) and isinstance(form_data[field], str):
+                            extracted_kenteken = form_data[field]
+                            break
+                    if extracted_kenteken:
+                        break
+
+            if extracted_kenteken:
+                try:
+                    normalized = normalize_kenteken(str(extracted_kenteken))
+                    log(f"Extracted kenteken {normalized} for participation {obj_id}")
+                    cursor.execute(
+                        "INSERT OR REPLACE INTO kentekens (id, kenteken) VALUES (?, ?)",
+                        (obj_id, normalized),
+                    )
+                except Exception as e:
+                    log(f"Error extracting kenteken: {str(e)}")
+
             cursor.execute(
                 """
                 INSERT OR REPLACE INTO tickets (obj_id, event_id, data, last_updated, access_key)
@@ -1070,6 +982,13 @@ def collect_tickets_for_event(event_id: str):
     log(
         f"Refreshed ticket data for {refreshed_count} participations for event {event_id}."
     )
+
+    # Trigger APK status check for the event to catch any newly extracted kentekens
+    try:
+        do_check_apk_status(event_id)
+    except Exception as e:
+        log(f"Error triggering APK check after ticket collection: {str(e)}")
+
     return {"status": "success", "message": f"Collected tickets for event {event_id}."}
 
 
