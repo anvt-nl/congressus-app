@@ -54,6 +54,26 @@ testing/
 4. **Open the dashboard:**
    - Visit the above URL in your browser.
 
+## License Plate (Kenteken) Management
+
+The application automatically extracts license plates (kentekens) from Congressus ticket data to enable automatic APK status checks.
+
+### How to link a ticket to a license plate
+
+1. **Configure Congressus:** Ensure that your Congressus ticket form has a field for the license plate. The system currently looks for specific field IDs:
+   - Member field: `custom_form_field_38585`
+   - Non-member field: `custom_form_field_36056`
+2. **Trigger Sync:** In the dashboard, click **Sync Data** or **Collect Tickets** for an event.
+3. **Automatic Processing:**
+   - The system fetches ticket data from Congressus.
+   - It extracts the license plate from the specified form fields.
+   - It normalizes the license plate (e.g., `AB12CD` -> `AB-12-CD`).
+   - It automatically triggers a background check with the RDW API for APK status, vehicle make, and model.
+
+### Viewing License Plates
+
+License plate information and APK status are displayed on the ticket details page when a QR code is scanned or a participant is viewed in the dashboard.
+
 ## Command-line Testing / Custom DB Location
 
 You can specify a custom location for the SQLite cache database using the `CONGRESSUS_CACHE_DB` environment variable. For example, to use a local file for testing:
@@ -128,6 +148,37 @@ Caches detailed ticket information for participants.
 - Associated ticket type metadata
 
 **Index:** `idx_tickets_event_id` on `event_id` for faster event-based queries.
+
+#### `kentekens`
+
+Stores the mapping between participations and license plates.
+
+| Column     | Type               | Description                                    |
+| ---------- | ------------------ | ---------------------------------------------- |
+| `id`       | TEXT (Primary Key) | Participation ID (Deelname-ID)                 |
+| `kenteken` | TEXT               | Normalized Dutch license plate (e.g. AB-12-CD) |
+
+#### `apk_status`
+
+Caches vehicle and APK information from the RDW Open Data API.
+
+| Column            | Type               | Description                         |
+| ----------------- | ------------------ | ----------------------------------- |
+| `kenteken`        | TEXT (Primary Key) | Normalized license plate            |
+| `vervaldatum_apk` | TEXT               | APK expiration date (YYYYMMDD)      |
+| `checked_at`      | TEXT               | Timestamp of the last RDW API check |
+| `merk`            | TEXT               | Vehicle make                        |
+| `handelsbenaming` | TEXT               | Vehicle model/type                  |
+
+#### `members`
+
+Caches member data from Congressus.
+
+| Column         | Type               | Description                                    |
+| -------------- | ------------------ | ---------------------------------------------- |
+| `member_id`    | TEXT (Primary Key) | Unique identifier for the member               |
+| `data`         | TEXT               | JSON string containing complete member details |
+| `last_updated` | TEXT               | ISO timestamp of last update                   |
 
 ### Cache Behavior
 
