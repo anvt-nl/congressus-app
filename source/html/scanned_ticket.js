@@ -5,6 +5,38 @@ const params = new URLSearchParams(window.location.search);
 const eventId = params.get("event_id");
 const ticketId = params.get("ticket_id");
 
+function playSound(type) {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+
+    osc.connect(gainNode);
+    gainNode.connect(ctx.destination);
+
+    if (type === 'beep') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime); // A5 note
+      gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
+      osc.start();
+      gainNode.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.3);
+      osc.stop(ctx.currentTime + 0.3);
+    } else if (type === 'buzzer') {
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(150, ctx.currentTime);
+      gainNode.gain.setValueAtTime(0.2, ctx.currentTime);
+      osc.start();
+      osc.frequency.linearRampToValueAtTime(100, ctx.currentTime + 0.5);
+      gainNode.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.5);
+      osc.stop(ctx.currentTime + 0.5);
+    }
+  } catch (e) {
+    console.error("Audio playback failed", e);
+  }
+}
+
 async function fetchTicketDetails() {
   if (!eventId || !ticketId) {
     document.getElementById("ticketDetails").innerHTML =
@@ -61,7 +93,7 @@ async function fetchTicketDetails() {
       if (ticketDetailsDiv) {
         ticketDetailsDiv.style.backgroundColor = '#d2ffd2'; // light green
       }
-
+      playSound('beep');
     }
     else {
       // Set the default background of ticketDetails to light red
@@ -70,6 +102,7 @@ async function fetchTicketDetails() {
       if (ticketDetailsDiv) {
         ticketDetailsDiv.style.backgroundColor = '#ffe5e5'; // light red
       }
+      playSound('buzzer');
    
       // Show warning overlay if data.scan contains a string
       if (typeof data.scan === 'string' && data.scan) {
