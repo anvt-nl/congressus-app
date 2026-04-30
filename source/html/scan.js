@@ -2,6 +2,7 @@ lucide.createIcons();
 
 let html5QrCode;
 let isScanning = false;
+let isProcessing = false;
 
 // UI Elements
 const startScanBtn = document.getElementById("startScanBtn");
@@ -113,6 +114,7 @@ function onScanSuccess(decodedText, decodedResult) {
   stopScanning();
 
   // Show loading indicator
+  isProcessing = true;
   loadingContainer.classList.remove("hidden");
   lucide.createIcons();
 
@@ -141,8 +143,10 @@ function onScanSuccess(decodedText, decodedResult) {
         window.location.href = `scanned_ticket.html?event_id=${ticket.event_id}&ticket_id=${ticket.obj_id}`;
       })
       .catch((err) => {
-        loadingContainer.classList.add("hidden");
         if (err.message === "Ticket not found in database.") {
+          isProcessing = false;
+          resetUI();
+          loadingContainer.classList.add("hidden");
           // Show the JSON data instead of error
           const prettyJson = JSON.stringify(data, null, 2);
 
@@ -179,6 +183,8 @@ function onScanError(errorMessage) {
 }
 
 function showError(message) {
+  isProcessing = false;
+  resetUI();
   loadingContainer.classList.add("hidden");
   errorMessage.textContent = message;
   errorContainer.classList.remove("hidden");
@@ -189,5 +195,17 @@ function resetUI() {
   scannerContainer.classList.add("hidden");
   stopButtonContainer.classList.add("hidden");
   scanButtonContainer.classList.remove("hidden");
+
+  if (isProcessing) {
+    startScanBtn.disabled = true;
+    startScanBtn.classList.add("opacity-50", "cursor-not-allowed");
+    startScanBtn.classList.remove("hover:shadow-xl", "hover:from-yellow-500", "hover:to-yellow-600", "hover:scale-105");
+    startScanBtn.innerHTML = '<i data-lucide="loader-2" class="w-6 h-6 animate-spin"></i> Bezig...';
+  } else {
+    startScanBtn.disabled = false;
+    startScanBtn.classList.remove("opacity-50", "cursor-not-allowed");
+    startScanBtn.classList.add("hover:shadow-xl", "hover:from-yellow-500", "hover:to-yellow-600", "hover:scale-105");
+    startScanBtn.innerHTML = '<i data-lucide="scan" class="w-6 h-6"></i> Start Scannen';
+  }
   lucide.createIcons();
 }
