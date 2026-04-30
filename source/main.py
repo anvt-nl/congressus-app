@@ -45,8 +45,10 @@ GET /ticket/{event_id}/{obj_id}/{new_status}
 All endpoints return JSON unless otherwise specified. Errors are returned with appropriate HTTP status codes and messages.
 """
 
+import concurrent.futures
 import json
 import os
+import pathlib
 import sqlite3
 import time
 from datetime import datetime, timedelta
@@ -67,10 +69,10 @@ PAGE_SIZE = 100
 MAX_SCAN_DAYS = int(os.getenv("MAX_SCAN_DAYS", 7))
 
 # Get current working directory of the script
-WORKING_DIRECTORY = __file__.rsplit("/", 1)[0]
+WORKING_DIRECTORY = pathlib.Path(__file__).parent
 
 # Get scriptname
-SCRIPT_NAME = __file__.rsplit("/", 1)[-1].split(".")[0]
+SCRIPT_NAME = pathlib.Path(__file__).stem
 
 api_access_key = open(f"{WORKING_DIRECTORY}/{API_KEY_PATH}").read().strip()
 headers = {"Authorization": f"Bearer {api_access_key}"}
@@ -186,11 +188,6 @@ def init_db():
 
 # Initialize DB on startup
 init_db()
-
-
-# Expose via FastAPI
-@app.get("/")
-# ... (rest of the code) ...
 
 
 @app.get("/")
@@ -516,11 +513,12 @@ def get_events(force_refresh: bool = False):
                 # Use global client
                 resp = HTTP_CLIENT.get(url, params=params)
                 resp.raise_for_status()
+                resp_data = resp.json()
 
-                events += resp.json().get("data", [])
-                has_next = resp.json().get("has_next", False)
+                events += resp_data.get("data", [])
+                has_next = resp_data.get("has_next", False)
                 if has_next:
-                    params["page"] = resp.json().get("next_num", params["page"] + 1)
+                    params["page"] = resp_data.get("next_num", params["page"] + 1)
 
             log(f"Fetched {len(events)} events from API.")
             log("Storing events in DB...")
@@ -539,9 +537,10 @@ def get_events(force_refresh: bool = False):
             log("Events stored in DB.")
 
             # Remove event IDs that are now in the database from existing_event_ids
+            fetched_event_ids = {str(event["id"]) for event in events}
             removed_events = 0
             for event_id in existing_event_ids:
-                if event_id in [str(event["id"]) for event in events]:
+                if event_id in fetched_event_ids:
                     continue
                 removed_events += 1
                 cursor.execute("DELETE FROM events WHERE event_id = ?", (event_id,))
@@ -621,14 +620,13 @@ def filter_events(events_list: List[Dict]) -> List[Dict]:
                 "SELECT data FROM participations WHERE event_id = ?", (event["id"],)
             )
             participations = [json.loads(row[0]) for row in cursor.fetchall()]
-            if participations != "[]":
-                for participation in participations:
-                    if participation["status"] != "approved":
-                        continue
-                    if participation["member_id"] is not None:
-                        leden_sold_tickets += 1
-                    elif participation["member_id"] is None:
-                        niet_leden_sold_tickets += 1
+            for participation in participations:
+                if participation["status"] != "approved":
+                    continue
+                if participation["member_id"] is not None:
+                    leden_sold_tickets += 1
+                else:
+                    niet_leden_sold_tickets += 1
             log(
                 f"Event {event['id']} - Leden: {leden_sold_tickets}/{leden_num_tickets}, Niet leden: {niet_leden_sold_tickets}/{niet_leden_num_tickets}"
             )
@@ -677,11 +675,12 @@ def get_participations(event_id: int, force_refresh: bool = False):
             while has_next:
                 resp = HTTP_CLIENT.get(url, params=params)
                 resp.raise_for_status()
+                resp_data = resp.json()
 
-                participations += resp.json().get("data", [])
-                has_next = resp.json().get("has_next", False)
+                participations += resp_data.get("data", [])
+                has_next = resp_data.get("has_next", False)
                 if has_next:
-                    params["page"] = resp.json().get("next_num", params["page"] + 1)
+                    params["page"] = resp_data.get("next_num", params["page"] + 1)
 
             log(
                 f"Fetched {len(participations)} participations from API for event {event_id}."
@@ -690,15 +689,6 @@ def get_participations(event_id: int, force_refresh: bool = False):
 
             for participation in participations:
                 # Strip whitespace from all string values in participation dict
-                def strip_values(obj):
-                    if isinstance(obj, dict):
-                        return {k: strip_values(v) for k, v in obj.items()}
-                    elif isinstance(obj, list):
-                        return [strip_values(i) for i in obj]
-                    elif isinstance(obj, str):
-                        return obj.strip()
-                    else:
-                        return obj
 
                 print(participation)
                 participation = strip_values(participation)
@@ -719,11 +709,10 @@ def get_participations(event_id: int, force_refresh: bool = False):
             log("Participations stored in DB.")
 
             # Remove participation IDs that are now in the database from existing_participation_ids
+            fetched_participation_ids = {str(p["id"]) for p in participations}
             removed_participations = 0
             for participation_id in existing_participation_ids:
-                if participation_id in [
-                    str(participation["id"]) for participation in participations
-                ]:
+                if participation_id in fetched_participation_ids:
                     continue
                 removed_participations += 1
                 cursor.execute(
@@ -938,8 +927,6 @@ def collect_tickets_for_event(event_id: str):
     participations = get_participations(event_id, force_refresh=True)
     log(f"Collected {len(participations)} participations for event {event_id}.")
 
-    import concurrent.futures
-
     # Filter participations that need updating
     to_update = []
     for participation in participations:
@@ -1080,7 +1067,6 @@ def do_check_apk_status(event_id: str):
                             handelsbenaming,
                         ),
                     )
-                    conn.commit()
                     checked += 1
 
                     if checked % 5 == 0:
@@ -1093,6 +1079,7 @@ def do_check_apk_status(event_id: str):
                 log(f"Error checking kenteken {kenteken}: {str(e)}")
                 errors += 1
 
+        conn.commit()
         log(
             f"APK check complete for event {event_id}: {checked} checked, {skipped} skipped (valid APK), {errors} errors"
         )
@@ -1116,7 +1103,8 @@ def get_members():
                 return json.loads(row[0])
 
             log("Data is outdated. Fetching new data from API...")
-        log("No members found in DB. Fetching from API...")
+        else:
+            log("No members found in DB. Fetching from API...")
         members = get_members_remote()
         cursor.execute("DELETE FROM members WHERE member_id = 'all'")
         cursor.execute(
@@ -1176,13 +1164,14 @@ def get_members_remote():
     url = f"{API_URL}/members"
     data = []
     while has_next:
-        resp = httpx.get(url, params=params, headers=headers, timeout=10)
+        resp = HTTP_CLIENT.get(url, params=params)
         resp.raise_for_status()
+        resp_data = resp.json()
 
-        data += resp.json().get("data", [])
-        has_next = resp.json().get("has_next", False)
+        data += resp_data.get("data", [])
+        has_next = resp_data.get("has_next", False)
         if has_next:
-            params["page"] = resp.json().get("next_num", params["page"] + 1)
+            params["page"] = resp_data.get("next_num", params["page"] + 1)
     members = {}
 
     for member in data:
@@ -1201,6 +1190,17 @@ def get_members_remote():
     now = time.strftime("%Y-%m-%d")
     members["last_updated"] = now
     return members
+
+
+def strip_values(obj):
+    if isinstance(obj, dict):
+        return {k: strip_values(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [strip_values(i) for i in obj]
+    elif isinstance(obj, str):
+        return obj.strip()
+    else:
+        return obj
 
 
 def log(message: str = ""):
