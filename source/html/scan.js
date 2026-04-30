@@ -11,6 +11,7 @@ const copyBtn = document.getElementById("copyBtn");
 const scanButtonContainer = document.getElementById("scanButtonContainer");
 const stopButtonContainer = document.getElementById("stopButtonContainer");
 const scannerContainer = document.getElementById("scannerContainer");
+const loadingContainer = document.getElementById("loadingContainer");
 const resultsContainer = document.getElementById("resultsContainer");
 const errorContainer = document.getElementById("errorContainer");
 const scanResult = document.getElementById("scanResult");
@@ -46,6 +47,7 @@ function startScanning() {
   // Hide results and errors
   resultsContainer.classList.add("hidden");
   errorContainer.classList.add("hidden");
+  loadingContainer.classList.add("hidden");
 
   // Cleanup previous error title if exists
   const oldTitle = document.getElementById("scanNotFoundTitle");
@@ -110,6 +112,10 @@ function onScanSuccess(decodedText, decodedResult) {
   // Stop scanning
   stopScanning();
 
+  // Show loading indicator
+  loadingContainer.classList.remove("hidden");
+  lucide.createIcons();
+
   try {
     const data = JSON.parse(decodedText);
     const accessKey = data.id || data.access_key;
@@ -135,6 +141,7 @@ function onScanSuccess(decodedText, decodedResult) {
         window.location.href = `scanned_ticket.html?event_id=${ticket.event_id}&ticket_id=${ticket.obj_id}`;
       })
       .catch((err) => {
+        loadingContainer.classList.add("hidden");
         if (err.message === "Ticket not found in database.") {
           // Show the JSON data instead of error
           const prettyJson = JSON.stringify(data, null, 2);
@@ -158,6 +165,7 @@ function onScanSuccess(decodedText, decodedResult) {
         }
       });
   } catch (e) {
+    loadingContainer.classList.add("hidden");
     showError("Invalid QR Code: Scanned data is not valid JSON.");
     // Show raw text for debugging if needed, or keeping it hidden to avoid confusion
     scanResult.textContent = decodedText;
@@ -171,6 +179,7 @@ function onScanError(errorMessage) {
 }
 
 function showError(message) {
+  loadingContainer.classList.add("hidden");
   errorMessage.textContent = message;
   errorContainer.classList.remove("hidden");
   lucide.createIcons();
