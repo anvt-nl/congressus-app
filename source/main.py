@@ -286,11 +286,43 @@ def get_ticket_by_access_key(access_key: str):
         row = cursor.fetchone()
         if row:
             return {"event_id": row[0], "obj_id": row[1]}
-        else:
-            return fastapi.responses.JSONResponse(
-                status_code=404,
-                content={"message": f"Ticket not found for {access_key}"},
+
+    # If ticket is not found, try to update the database with all tickets from active events
+    log(f"Ticket {access_key} not found in DB. Checking active events to update...")
+
+    events = get_events(force_refresh=False)
+    now = datetime.now()
+    updated_events = False
+
+    for event in events:
+        start = event.get("start")
+        if start:
+            event_date = datetime.strptime(start, "%Y-%m-%dT%H:%M:%S")
+            # Same condition as scan_ticket: only active events within -MAX_SCAN_DAYS and +3 days
+            if (event_date - now).days <= 3 and (
+                now - event_date
+            ).days <= MAX_SCAN_DAYS:
+                log(f"Updating database with tickets from active event {event['id']}")
+                collect_tickets_for_event(str(event["id"]))
+                updated_events = True
+
+    if updated_events:
+        # Check again if the ticket is now in the database
+        with sqlite3.connect(DB_PATH, timeout=30) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT event_id, obj_id FROM tickets WHERE access_key = ?",
+                (access_key,),
             )
+            row = cursor.fetchone()
+            if row:
+                log(f"Ticket {access_key} found after refreshing active events.")
+                return {"event_id": row[0], "obj_id": row[1]}
+
+    return fastapi.responses.JSONResponse(
+        status_code=404,
+        content={"message": f"Ticket not found for {access_key}"},
+    )
 
 
 @app.get("/events")
