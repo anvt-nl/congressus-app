@@ -7,6 +7,7 @@ Next to the events data it also collects the tickets sold for each event and the
 
 All this information will be available via API calls to this script via FastAPI:
 
+
 API Endpoints:
 
 GET /
