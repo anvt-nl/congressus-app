@@ -7,6 +7,15 @@ function showForceSyncMsg() {
   setTimeout(() => msg.classList.add("hidden"), 2000);
 }
 
+function setSyncButtonState(syncing) {
+  const button = document.getElementById("syncBtn");
+  if (!button) return;
+
+  button.disabled = syncing;
+  button.classList.toggle("opacity-60", syncing);
+  button.classList.toggle("cursor-not-allowed", syncing);
+}
+
 // Confirm before force sync
 async function confirmAndForceSync() {
   const proceed = confirm(
@@ -20,17 +29,7 @@ async function confirmAndForceSync() {
 document.addEventListener("keydown", async (e) => {
   if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "r") {
     if (await confirmAndForceSync()) {
-      try {
-        const resp = await fetch("/events/refresh");
-        const data = await resp.json();
-        if (data.status === "accepted") {
-          document.getElementById("api-status").innerHTML =
-            `<span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span> Syncing in background...`;
-          showForceSyncMsg();
-        }
-      } catch {}
-      // We don't wait for sync to finish, just reload cached data
-      fetchEvents();
+      await syncEvents();
     }
   }
 });
@@ -41,16 +40,7 @@ const syncBtn = document.getElementById("syncBtn");
 syncBtn.addEventListener("touchstart", () => {
   forceSyncTimeout = setTimeout(async () => {
     if (await confirmAndForceSync()) {
-      try {
-        const resp = await fetch("/events/refresh");
-        const data = await resp.json();
-        if (data.status === "accepted") {
-          document.getElementById("api-status").innerHTML =
-            `<span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span> Syncing in background...`;
-          showForceSyncMsg();
-        }
-      } catch {}
-      fetchEvents();
+      await syncEvents();
     }
   }, 2000); // 2 seconds long-press
 });
@@ -60,6 +50,29 @@ syncBtn.addEventListener("touchend", () => {
 
 const API_URL = "/events";
 let allEvents = [];
+
+async function syncEvents() {
+  const statusText = document.getElementById("api-status");
+  setSyncButtonState(true);
+  statusText.innerHTML =
+    `<span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span> Syncing with Congressus backend...`;
+
+  try {
+    const response = await fetch("/events/refresh");
+    if (!response.ok) throw new Error("Sync failed");
+
+    allEvents = await response.json();
+    renderEvents(allEvents);
+    statusText.innerHTML =
+      `<span class="w-2 h-2 rounded-full bg-emerald-500"></span> Synced with backend`;
+    showForceSyncMsg();
+  } catch (err) {
+    statusText.innerHTML =
+      `<span class="w-2 h-2 rounded-full bg-red-500"></span> Error: ${err.message}`;
+  } finally {
+    setSyncButtonState(false);
+  }
+}
 
 // 1. Fetch Data from Backend
 async function fetchEvents() {
