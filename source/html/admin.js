@@ -1,4 +1,10 @@
 function buildShareUrl(token) {
+  const url = new URL("scan.html", window.location.href);
+  url.searchParams.set("access_token", token);
+  return url.toString();
+}
+
+function buildHomeUrl(token) {
   const url = new URL("index.html", window.location.href);
   url.searchParams.set("access_token", token);
   return url.toString();
@@ -26,6 +32,17 @@ function selectToken(token, expiresAt) {
   setTokenStatus("Toegangslink geladen uit actieve tokens.");
 }
 
+function getCurrentTokenFromUrlField() {
+  const tokenUrlInput = document.getElementById("tokenUrl");
+  if (!tokenUrlInput || !tokenUrlInput.value) return null;
+
+  try {
+    const url = new URL(tokenUrlInput.value);
+    return url.searchParams.get("access_token");
+  } catch {
+    return null;
+  }
+}
 async function loadActiveTokens() {
   const tokenList = document.getElementById("tokenList");
   if (!tokenList) return;
@@ -78,9 +95,12 @@ async function revokeToken(token) {
   }
 
   try {
-    const response = await fetch(`/admin/access-token/${encodeURIComponent(token)}`, {
-      method: "DELETE",
-    });
+    const response = await fetch(
+      `/admin/access-token/${encodeURIComponent(token)}`,
+      {
+        method: "DELETE",
+      },
+    );
     const result = await response.json();
 
     if (!response.ok || result.status !== "success") {
@@ -114,8 +134,7 @@ async function generateToken() {
     if (!response.ok) throw new Error("Token genereren mislukt.");
 
     const result = await response.json();
-    const shareUrl = buildShareUrl(result.token);
-    tokenUrlInput.value = shareUrl;
+    tokenUrlInput.value = buildShareUrl(result.token);
     tokenExpiresAt.textContent = `Geldig tot: ${result.expires_at}`;
     setTokenStatus("Toegangslink gegenereerd.");
     await loadActiveTokens();
@@ -157,6 +176,15 @@ async function copyTokenUrl() {
   }
 }
 
+function openHomepageWithToken() {
+  const token = getCurrentTokenFromUrlField();
+  if (!token) {
+    setTokenStatus("Genereer of selecteer eerst een token.", true);
+    return;
+  }
+
+  window.location.href = buildHomeUrl(token);
+}
 async function loadTables() {
   const tableList = document.getElementById("tableList");
   tableList.innerHTML =
@@ -230,15 +258,13 @@ document.addEventListener("DOMContentLoaded", () => {
     copyTokenBtn.addEventListener("click", copyTokenUrl);
   }
 
+  const openHomeBtn = document.getElementById("openHomeBtn");
+  if (openHomeBtn) {
+    openHomeBtn.addEventListener("click", openHomepageWithToken);
+  }
   const refreshTokensBtn = document.getElementById("refreshTokensBtn");
   if (refreshTokensBtn) {
     refreshTokensBtn.addEventListener("click", loadActiveTokens);
-  }
-
-  const authRequiredNotice = document.getElementById("authRequiredNotice");
-  const params = new URLSearchParams(window.location.search);
-  if (authRequiredNotice && params.get("message") === "auth-required") {
-    authRequiredNotice.classList.remove("hidden");
   }
 
   loadActiveTokens();

@@ -11,38 +11,54 @@ function clearStoredAccessToken() {
   localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
 }
 
+function whenBodyReady(callback) {
+  if (document.body) {
+    callback();
+    return;
+  }
+
+  document.addEventListener("DOMContentLoaded", callback, { once: true });
+}
 function showAccessDenied(
   message = "Geen geldig toegangstoken gevonden.",
   token = null,
 ) {
   clearStoredAccessToken();
-  const tokenDetails = token
-    ? `
-        <div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-left">
-          <div class="text-xs font-semibold text-slate-500 mb-1">Gebruikt token</div>
-          <div class="font-mono text-xs break-all text-slate-700">${token}</div>
+  whenBodyReady(() => {
+    const tokenDetails = token
+      ? `
+          <div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-left">
+            <div class="text-xs font-semibold text-slate-500 mb-1">Gebruikt token</div>
+            <div class="font-mono text-xs break-all text-slate-700">${token}</div>
+          </div>
+        `
+      : "";
+    document.body.className = "bg-slate-50 min-h-screen";
+    document.body.innerHTML = `
+      <div class="min-h-screen flex items-center justify-center px-4">
+        <div class="max-w-md w-full bg-white border border-red-200 rounded-2xl shadow-lg p-8 text-center">
+          <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-red-600 text-2xl font-bold">
+            !
+          </div>
+          <h1 class="text-2xl font-black text-slate-900 mb-2">Geen toegang</h1>
+          <p class="text-slate-600 mb-6">${message}</p>
+          ${tokenDetails}
+          <div class="mb-6">
+            <a
+              href="admin.html"
+              class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
+            >
+              Naar admin pagina
+            </a>
+          </div>
+          <p class="text-sm text-slate-500">
+            Vraag een beheerder om een geldige toegangslink.
+          </p>
         </div>
-      `
-    : "";
-  document.body.className = "bg-slate-50 min-h-screen";
-  document.body.innerHTML = `
-    <div class="min-h-screen flex items-center justify-center px-4">
-      <div class="max-w-md w-full bg-white border border-red-200 rounded-2xl shadow-lg p-8 text-center">
-        <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-red-600 text-2xl font-bold">
-          !
-        </div>
-        <h1 class="text-2xl font-black text-slate-900 mb-2">Geen toegang</h1>
-        <p class="text-slate-600 mb-6">
-          ${message}
-        </p>
-        ${tokenDetails}
-        <p class="text-sm text-slate-500">
-          Vraag een beheerder om een geldige toegangslink.
-        </p>
       </div>
-    </div>
-  `;
-  restorePageVisibility();
+    `;
+    restorePageVisibility();
+  });
 }
 
 async function validateAccessToken(token) {

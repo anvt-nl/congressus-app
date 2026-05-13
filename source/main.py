@@ -214,10 +214,12 @@ def current_datetime() -> datetime:
 
 
 def cleanup_expired_access_tokens():
-    now = current_timestamp()
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM access_tokens WHERE expires_at <= ?", (now,))
+        cursor.execute(
+            "DELETE FROM access_tokens WHERE expires_at <= ?",
+            (current_timestamp(),),
+        )
         conn.commit()
 
 
@@ -529,7 +531,7 @@ def clear_table(table_name: str):
 
 
 @app.post("/admin/access-token")
-def generate_access_token():
+def generate_access_token_endpoint():
     log("Admin: Generating access token")
     return create_access_token(valid_days=5)
 
