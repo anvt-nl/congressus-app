@@ -228,11 +228,15 @@ function renderSubTable(title, rows) {
       : "";
         // Determine style for member name if lid_valid is false
         let nameCellStyle = "";
+        const nameTitle =
+          p.lid_valid === false && p.lid_invalid_reason
+            ? p.lid_invalid_reason.replace(/"/g, "&quot;")
+            : p.addressee || "";
         if (p.lid_valid === false) {
           nameCellStyle = "background-color: red; color: white; padding: 2px 6px; border-radius: 4px;";
         }
         html += `<tr class="${trClass}" ${trOnClick}>
-          <td class="px-2 py-2 truncate max-w-[120px]" title="${p.addressee}"${nameCellStyle ? ` style='${nameCellStyle}'` : ''}>${p.addressee || ""}</td>
+          <td class="px-2 py-2 truncate max-w-[120px]" title="${nameTitle}"${nameCellStyle ? ` style='${nameCellStyle}'` : ""}>${p.addressee || ""}</td>
           <td class="px-2 py-2 truncate max-w-[120px]" title="${p.email}">${p.email || ""}</td>`;
     // Add APK styling to kenteken cell
     const apkData = apkStatusData[ticketId];
@@ -360,42 +364,6 @@ async function collectAllTickets() {
   btn.disabled = false;
   btn.innerHTML =
     '<i data-lucide="ticket" class="w-4 h-4"></i> Collect All Tickets';
-  rerenderIcons();
-}
-
-// Check APK status for all kentekens in this event
-async function checkApkStatus() {
-  if (!eventId) return;
-  const btn = document.getElementById("checkApkBtn");
-  btn.disabled = true;
-  btn.innerHTML =
-    '<span class="animate-spin mr-2"><i data-lucide="loader" class="w-4 h-4"></i></span> Checking...';
-  try {
-    const response = await fetch(`/check-apk/${eventId}`, {
-      method: "POST",
-    });
-    const data = await response.json();
-    if (data.status === "accepted") {
-      const statusMsg = document.getElementById("forceSyncMsg");
-      statusMsg.textContent = "APK check started in background!";
-      statusMsg.classList.remove("hidden");
-      setTimeout(() => {
-        statusMsg.classList.add("hidden");
-        statusMsg.textContent = "Force sync complete!";
-      }, 3000);
-      // Refresh after a delay to show results
-      setTimeout(() => {
-        fetchParticipations(eventId);
-      }, 5000);
-    } else {
-      alert("Failed to start APK check: " + (data.message || "Unknown error"));
-    }
-  } catch (err) {
-    alert("Error contacting backend.");
-  }
-  btn.disabled = false;
-  btn.innerHTML =
-    '<i data-lucide="shield-check" class="w-4 h-4"></i> Check APK';
   rerenderIcons();
 }
 

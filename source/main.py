@@ -956,11 +956,15 @@ def get_participations(event_id: int, force_refresh: bool = False):
         member_id = str(p.get("member_id")) if p.get("member_id") is not None else None
         if member_id is not None:
             member_info = members.get(member_id)
-            member_to_date = member_info.get("member_to") if member_info else None
-            member_type = member_info.get("name", None) if member_info else None
-            filtered_participations[-1]["lid_valid"] = validate_member_data(
-                member_type, member_to_date, event_date_str
+            validation_result = get_member_validation_result(
+                member_info.get("name") if member_info else None,
+                member_info.get("member_to") if member_info else None,
+                event_date_str,
             )
+            filtered_participations[-1]["lid_valid"] = validation_result["valid"]
+            filtered_participations[-1]["lid_invalid_reason"] = validation_result[
+                "reason"
+            ]
     return filtered_participations
 
 
@@ -1065,6 +1069,23 @@ def filter_tickets(tickets_list: Dict) -> Dict:
         "status": tickets_list.get("status", ""),
         "tickets": tickets,
     }
+
+    member_id = (
+        str(tickets_list.get("member_id"))
+        if tickets_list.get("member_id") is not None
+        else None
+    )
+    if member_id is not None:
+        members = get_members()
+        member_info = members.get(member_id)
+        validation_result = get_member_validation_result(
+            member_info.get("name") if member_info else None,
+            member_info.get("member_to") if member_info else None,
+            return_list["event_date"],
+        )
+        return_list["lid_valid"] = validation_result["valid"]
+        return_list["lid_invalid_reason"] = validation_result["reason"]
+
     return return_list
 
 
@@ -1299,6 +1320,57 @@ def get_members():
         return members
 
 
+def get_member_validation_result(
+    member_name: str | None, member_to_str: str | None, date_str: str | None
+) -> Dict[str, str | bool | None]:
+    valid_statuses = {"Lid (Geen verloopdatum)", "Ere-lid"}
+
+    if not date_str or date_str == "N/A":
+        return {"valid": False, "reason": "Evenementdatum onbekend."}
+
+    if "T" in date_str:
+        date_str = date_str.split("T")[0]
+
+    try:
+        event_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return {"valid": False, "reason": "Evenementdatum onbekend."}
+
+    if member_name in valid_statuses:
+        return {"valid": True, "reason": None}
+
+    if member_to_str and member_to_str != "N/A":
+        try:
+            member_to_date = datetime.strptime(member_to_str, "%Y-%m-%d").date()
+        except ValueError:
+            return {
+                "valid": False,
+                "reason": f"Ongeldige lidmaatschapsdatum: {member_to_str}.",
+            }
+
+        if member_to_date >= event_date:
+            return {"valid": True, "reason": None}
+
+        return {
+            "valid": False,
+            "reason": (
+                f"Lidmaatschap verlopen op {member_to_str}; niet geldig op "
+                f"{event_date.isoformat()}."
+            ),
+        }
+
+    if member_name:
+        return {
+            "valid": False,
+            "reason": (
+                f"Lidtype '{member_name}' heeft geen geldige verloopdatum voor "
+                f"{event_date.isoformat()}."
+            ),
+        }
+
+    return {"valid": False, "reason": "Lid niet gevonden in de ledenadministratie."}
+
+
 def validate_member_data(member_name: str, member_to_str: str, date_str: str) -> bool:
     """
     This function validates is a member has a valid membership.
@@ -1311,27 +1383,7 @@ def validate_member_data(member_name: str, member_to_str: str, date_str: str) ->
     :rtype: bool
     """
 
-    valid_status = False
-    valid_statuses = {"Lid (Geen verloopdatum)", "Ere-lid"}
-    member_to_date = (
-        datetime.strptime(member_to_str, "%Y-%m-%d").date()
-        if member_to_str and member_to_str != "N/A"
-        else None
-    )
-    log(f"date_str: {date_str}, type: {type(date_str)}")
-    if "T" in date_str:
-        date_str = date_str.split("T")[0]
-    date_date = (
-        datetime.strptime(date_str, "%Y-%m-%d").date()
-        if date_str and date_str != "N/A"
-        else None
-    )
-    if member_to_date and member_to_date >= date_date:
-        valid_status = True
-    elif member_name in valid_statuses:
-        valid_status = True
-
-    return valid_status
+    return bool(get_member_validation_result(member_name, member_to_str, date_str)["valid"])
 
 
 def get_members_remote():

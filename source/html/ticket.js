@@ -63,6 +63,14 @@ async function fetchTicketDetails() {
 			</div>`;
     }
 
+    const membershipWarning =
+      data.lid_valid === false && data.lid_invalid_reason
+        ? `<div class="mt-4 rounded-lg border border-red-300 bg-red-100 p-4 text-red-800">
+				<div class="font-bold">Lidmaatschap niet geldig</div>
+				<div class="mt-1">${data.lid_invalid_reason}</div>
+			</div>`
+        : "";
+
     // Build vehicle/APK info section if available
     let vehicleInfo = "";
     if (data.kenteken || data.apk_status) {
@@ -105,9 +113,10 @@ async function fetchTicketDetails() {
     document.getElementById("ticketDetails").innerHTML = `
 			<div><b>Evenement:</b> ${data.event_name || ""}</div>
 			<div><b>Datum:</b> ${eventDateStr}</div>
-			<div><b>Naam:</b> ${data.addressee || ""}</div>
+			<div><b>Naam:</b> <span class="${data.lid_valid === false ? "text-red-700 font-bold" : ""}">${data.addressee || ""}</span></div>
 			<div><b>Email:</b> ${data.email || ""}</div>
 			<div><b>Status:</b> ${data.status || ""}</div>
+			${membershipWarning}
 			${ticketTypesTable}
 			${vehicleInfo}
 			<div id="presenceOverlay" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.3); z-index:1000; align-items:center; justify-content:center;">

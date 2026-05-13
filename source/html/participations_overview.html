@@ -27,6 +27,10 @@
           Participations Overview
         </h1>
         <div id="eventDate" class="text-slate-500 text-base font-normal"></div>
+        <div
+          id="eventNavigation"
+          class="mt-2 flex items-center justify-between gap-4 text-sm"
+        ></div>
       </div>
 
       <!-- Controls row: checkboxes left, buttons right -->
@@ -42,19 +46,18 @@
           </label>
         </div>
         <div class="flex gap-2 items-center">
+          <a
+            href="scan.html"
+            class="flex items-center gap-2 bg-yellow-400 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-yellow-500 transition"
+          >
+            <i data-lucide="scan" class="w-4 h-4"></i> Scan Tickets
+          </a>
           <button
             id="syncBtn"
             onclick="refreshParticipations()"
             class="flex items-center gap-2 bg-white border px-4 py-2 rounded-lg shadow-sm hover:bg-slate-50 transition"
           >
             <i data-lucide="refresh-cw" class="w-4 h-4"></i> Sync Data
-          </button>
-          <button
-            id="checkApkBtn"
-            onclick="checkApkStatus()"
-            class="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-green-700 transition"
-          >
-            <i data-lucide="shield-check" class="w-4 h-4"></i> Check APK
           </button>
           <button
             id="collectTicketsBtn"

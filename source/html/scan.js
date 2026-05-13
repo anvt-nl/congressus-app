@@ -9,6 +9,7 @@ const startScanBtn = document.getElementById("startScanBtn");
 const stopScanBtn = document.getElementById("stopScanBtn");
 const scanAgainBtn = document.getElementById("scanAgainBtn");
 const copyBtn = document.getElementById("copyBtn");
+const closestEventBtn = document.getElementById("closestEventBtn");
 const scanButtonContainer = document.getElementById("scanButtonContainer");
 const stopButtonContainer = document.getElementById("stopButtonContainer");
 const scannerContainer = document.getElementById("scannerContainer");
@@ -43,6 +44,101 @@ copyBtn.addEventListener("click", () => {
       showError("Failed to copy: " + err.message);
     });
 });
+
+if (closestEventBtn) {
+  closestEventBtn.addEventListener("click", goToClosestEvent);
+}
+
+async function goToClosestEvent() {
+  if (!closestEventBtn) return;
+
+  const originalHtml = closestEventBtn.innerHTML;
+  closestEventBtn.disabled = true;
+  closestEventBtn.classList.add("opacity-60", "cursor-not-allowed");
+  closestEventBtn.innerHTML =
+    '<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i> Laden...';
+  lucide.createIcons();
+
+  try {
+    const response = await fetch("/events");
+    if (!response.ok) throw new Error("Evenementen konden niet worden geladen.");
+
+    const events = await response.json();
+    if (!Array.isArray(events) || events.length === 0) {
+      throw new Error("Geen evenementen gevonden.");
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let todayEvent = null;
+    let nearestPastEvent = null;
+    let nearestFutureEvent = null;
+
+    for (const event of events) {
+      if (!event.start) continue;
+
+      const eventDate = new Date(String(event.start).split("T")[0]);
+      if (Number.isNaN(eventDate.getTime())) continue;
+      eventDate.setHours(0, 0, 0, 0);
+
+      const eventTime = eventDate.getTime();
+      const todayTime = today.getTime();
+
+      if (eventTime === todayTime) {
+        todayEvent = event;
+        continue;
+      }
+
+      if (eventTime < todayTime) {
+        if (
+          !nearestPastEvent ||
+          eventTime >
+            new Date(String(nearestPastEvent.start).split("T")[0]).getTime()
+        ) {
+          nearestPastEvent = event;
+        }
+        continue;
+      }
+
+      if (
+        !nearestFutureEvent ||
+        eventTime < new Date(String(nearestFutureEvent.start).split("T")[0]).getTime()
+      ) {
+        nearestFutureEvent = event;
+      }
+    }
+
+    let closestEvent = todayEvent;
+
+    if (!closestEvent && nearestPastEvent && nearestFutureEvent) {
+      const pastDistance =
+        today.getTime() -
+        new Date(String(nearestPastEvent.start).split("T")[0]).getTime();
+      const futureDistance =
+        new Date(String(nearestFutureEvent.start).split("T")[0]).getTime() -
+        today.getTime();
+
+      closestEvent =
+        futureDistance <= pastDistance ? nearestFutureEvent : nearestPastEvent;
+    } else if (!closestEvent) {
+      closestEvent = nearestFutureEvent || nearestPastEvent;
+    }
+
+    if (!closestEvent) {
+      throw new Error("Geen geldig evenement met datum gevonden.");
+    }
+
+    window.location.href = `participations_overview.html?event_id=${closestEvent.id}`;
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    closestEventBtn.disabled = false;
+    closestEventBtn.classList.remove("opacity-60", "cursor-not-allowed");
+    closestEventBtn.innerHTML = originalHtml;
+    lucide.createIcons();
+  }
+}
 
 function startScanning() {
   // Hide results and errors
