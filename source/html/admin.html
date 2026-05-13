@@ -41,6 +41,65 @@
         </p>
       </div>
 
+      <div class="bg-white rounded-xl border shadow-sm p-6 mb-8">
+        <div class="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h2 class="text-xl font-bold text-slate-900">Toegangstoken</h2>
+            <p class="text-sm text-slate-500">
+              Genereer een deelbare URL die 5 dagen geldig is.
+            </p>
+          </div>
+          <button
+            id="generateTokenBtn"
+            class="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-blue-700 transition"
+          >
+            <i data-lucide="key-round" class="w-4 h-4"></i> Genereer token
+          </button>
+        </div>
+        <div
+          id="authRequiredNotice"
+          class="hidden mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+        >
+          Voor deze pagina was een geldig token nodig. Genereer hieronder een
+          nieuwe toegangslink.
+        </div>
+        <label
+          for="tokenUrl"
+          class="block text-sm font-medium text-slate-700 mb-2"
+        >
+          Deelbare URL
+        </label>
+        <div class="flex gap-2">
+          <input
+            id="tokenUrl"
+            type="text"
+            readonly
+            placeholder="Nog geen token gegenereerd"
+            class="flex-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+          />
+          <button
+            id="copyTokenBtn"
+            class="flex items-center gap-2 bg-slate-200 text-slate-700 px-4 py-2 rounded-lg shadow-sm hover:bg-slate-300 transition"
+          >
+            <i data-lucide="copy" class="w-4 h-4"></i> Kopieer
+          </button>
+        </div>
+        <p id="tokenExpiresAt" class="mt-3 text-sm text-slate-500"></p>
+        <p id="tokenStatus" class="mt-2 text-sm"></p>
+        <div class="mt-6">
+          <div class="flex items-center justify-between gap-4 mb-3">
+            <h3 class="text-sm font-semibold text-slate-900">Actieve tokens</h3>
+            <button
+              id="refreshTokensBtn"
+              class="flex items-center gap-2 bg-slate-200 text-slate-700 px-3 py-2 rounded-lg shadow-sm hover:bg-slate-300 transition text-sm"
+            >
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i> Vernieuwen
+            </button>
+          </div>
+          <div id="tokenList" class="grid gap-3"></div>
+        </div>
+      </div>
+
       <div id="tableList" class="grid gap-4">
         <!-- Tables will be loaded here -->
       </div>

@@ -50,6 +50,7 @@ import concurrent.futures
 import json
 import os
 import pathlib
+import secrets
 import sqlite3
 import time
 from datetime import datetime, timedelta
@@ -185,6 +186,18 @@ def init_db():
             )
         """
         )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS access_tokens (
+                token TEXT PRIMARY KEY,
+                created_at TEXT,
+                expires_at TEXT
+            )
+        """
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_access_tokens_expires_at ON access_tokens(expires_at)"
+        )
         conn.commit()
 
 
@@ -194,6 +207,89 @@ init_db()
 
 def current_timestamp() -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def current_datetime() -> datetime:
+    return datetime.now()
+
+
+def cleanup_expired_access_tokens():
+    now = current_timestamp()
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM access_tokens WHERE expires_at <= ?", (now,))
+        conn.commit()
+
+
+def create_access_token(valid_days: int = 5) -> Dict[str, str]:
+    cleanup_expired_access_tokens()
+    created_at = current_datetime()
+    expires_at = created_at + timedelta(days=valid_days)
+    token = secrets.token_urlsafe(32)
+
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO access_tokens (token, created_at, expires_at)
+            VALUES (?, ?, ?)
+        """,
+            (
+                token,
+                created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                expires_at.strftime("%Y-%m-%d %H:%M:%S"),
+            ),
+        )
+        conn.commit()
+
+    return {
+        "token": token,
+        "created_at": created_at.strftime("%Y-%m-%d %H:%M:%S"),
+        "expires_at": expires_at.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+
+def get_access_token(token: str) -> Dict[str, str] | None:
+    cleanup_expired_access_tokens()
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT token, created_at, expires_at FROM access_tokens WHERE token = ?",
+            (token,),
+        )
+        row = cursor.fetchone()
+
+    if not row:
+        return None
+
+    return {"token": row[0], "created_at": row[1], "expires_at": row[2]}
+
+
+def list_access_tokens() -> List[Dict[str, str]]:
+    cleanup_expired_access_tokens()
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT token, created_at, expires_at
+            FROM access_tokens
+            ORDER BY expires_at ASC, created_at ASC
+        """
+        )
+        rows = cursor.fetchall()
+
+    return [
+        {"token": row[0], "created_at": row[1], "expires_at": row[2]} for row in rows
+    ]
+
+
+def revoke_access_token(token: str) -> bool:
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM access_tokens WHERE token = ?", (token,))
+        deleted = cursor.rowcount > 0
+        conn.commit()
+    return deleted
 
 
 def parse_db_timestamp(value: str | None) -> datetime | None:
@@ -383,7 +479,15 @@ def get_tables():
     """
     Get list of manageable tables in the database.
     """
-    return ["events", "participations", "tickets", "kentekens", "apk_status", "members"]
+    return [
+        "events",
+        "participations",
+        "tickets",
+        "kentekens",
+        "apk_status",
+        "members",
+        "access_tokens",
+    ]
 
 
 @app.post("/admin/clear-table/{table_name}")
@@ -398,6 +502,7 @@ def clear_table(table_name: str):
         "kentekens",
         "apk_status",
         "members",
+        "access_tokens",
     ]
     if table_name not in allowed_tables:
         return fastapi.responses.JSONResponse(
@@ -421,6 +526,43 @@ def clear_table(table_name: str):
             status_code=500,
             content={"status": "error", "message": f"Error clearing table: {str(e)}"},
         )
+
+
+@app.post("/admin/access-token")
+def generate_access_token():
+    log("Admin: Generating access token")
+    return create_access_token(valid_days=5)
+
+
+@app.get("/admin/access-tokens")
+def get_access_tokens():
+    log("Admin: Listing active access tokens")
+    return list_access_tokens()
+
+
+@app.delete("/admin/access-token/{token}")
+def delete_access_token(token: str):
+    log("Admin: Revoking access token")
+    if not revoke_access_token(token):
+        return fastapi.responses.JSONResponse(
+            status_code=404,
+            content={"status": "error", "message": "Token not found"},
+        )
+
+    return {"status": "success"}
+
+
+@app.get("/auth/validate")
+def validate_access_token(token: str):
+    token_data = get_access_token(token)
+    if not token_data:
+        return {"valid": False}
+
+    return {
+        "valid": True,
+        "created_at": token_data["created_at"],
+        "expires_at": token_data["expires_at"],
+    }
 
 
 @app.get("/ticket/by-access-key/{access_key}")
