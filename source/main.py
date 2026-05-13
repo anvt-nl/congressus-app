@@ -68,6 +68,7 @@ API_KEY_PATH = "api-key-2.txt"
 DB_PATH = os.getenv("CONGRESSUS_CACHE_DB", "/db/congressus_cache.db")
 PAGE_SIZE = 100
 MAX_SCAN_DAYS = int(os.getenv("MAX_SCAN_DAYS", 7))
+STALE_EVENT_REFRESH_DAYS = int(os.getenv("STALE_EVENT_REFRESH_DAYS", 2))
 
 # Get current working directory of the script
 WORKING_DIRECTORY = pathlib.Path(__file__).parent
@@ -189,6 +190,155 @@ def init_db():
 
 # Initialize DB on startup
 init_db()
+
+
+def current_timestamp() -> str:
+    return time.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def parse_db_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+
+
+def parse_event_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+
+    normalized = value.strip()
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        try:
+            parsed = datetime.strptime(value, "%Y-%m-%dT%H:%M:%S")
+        except ValueError:
+            return None
+
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone().replace(tzinfo=None)
+
+    return parsed
+
+
+def store_event(cursor: sqlite3.Cursor, event: Dict):
+    cursor.execute(
+        """
+        INSERT OR REPLACE INTO events (event_id, data, last_updated)
+        VALUES (?, ?, ?)
+    """,
+        (str(event["id"]), json.dumps(event), current_timestamp()),
+    )
+
+
+def delete_event_records(cursor: sqlite3.Cursor, event_id: str):
+    cursor.execute(
+        "SELECT participation_id FROM participations WHERE event_id = ?", (event_id,)
+    )
+    participation_ids = [row[0] for row in cursor.fetchall()]
+
+    if participation_ids:
+        placeholders = ",".join("?" for _ in participation_ids)
+        cursor.execute(
+            f"DELETE FROM kentekens WHERE id IN ({placeholders})", participation_ids
+        )
+
+    cursor.execute("DELETE FROM tickets WHERE event_id = ?", (event_id,))
+    cursor.execute("DELETE FROM participations WHERE event_id = ?", (event_id,))
+    cursor.execute("DELETE FROM events WHERE event_id = ?", (event_id,))
+
+
+def delete_event_from_db(event_id: str):
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
+        delete_event_records(cursor, event_id)
+        conn.commit()
+
+
+def fetch_event_from_api(event_id: str) -> Dict | None:
+    url = f"{API_URL}/events/{event_id}"
+    resp = HTTP_CLIENT.get(url)
+    resp.raise_for_status()
+    event_data = resp.json()
+
+    if isinstance(event_data, dict) and isinstance(event_data.get("data"), dict):
+        return event_data["data"]
+    if isinstance(event_data, dict):
+        return event_data
+    return None
+
+
+def sync_event_with_backend(event_id: str) -> bool:
+    log(f"Refreshing event {event_id} from Congressus backend...")
+
+    try:
+        event = fetch_event_from_api(event_id)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            log(f"Event {event_id} no longer exists remotely. Removing local cache.")
+            delete_event_from_db(event_id)
+            return False
+        log(f"Failed to refresh event {event_id}: {exc}")
+        return False
+    except httpx.HTTPError as exc:
+        log(f"Failed to refresh event {event_id}: {exc}")
+        return False
+
+    if not event or not event.get("id"):
+        log(f"Event {event_id} returned invalid data. Removing local cache.")
+        delete_event_from_db(event_id)
+        return False
+
+    if event.get("published") is False:
+        log(f"Event {event_id} is no longer published. Removing local cache.")
+        delete_event_from_db(event_id)
+        return False
+
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
+        store_event(cursor, event)
+        conn.commit()
+
+    get_participations(str(event["id"]), force_refresh=True)
+    return True
+
+
+def refresh_stale_future_events():
+    now = datetime.now()
+    stale_event_ids = []
+
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT event_id, data, last_updated FROM events")
+        rows = cursor.fetchall()
+
+    for event_id, event_data, last_updated in rows:
+        event = json.loads(event_data)
+        start_dt = parse_event_datetime(event.get("start"))
+        if start_dt is None or start_dt <= now:
+            continue
+
+        last_updated_dt = parse_db_timestamp(last_updated)
+        if last_updated_dt is None or last_updated_dt <= now - timedelta(
+            days=STALE_EVENT_REFRESH_DAYS
+        ):
+            stale_event_ids.append(str(event_id))
+
+    if not stale_event_ids:
+        return
+
+    log(
+        f"Refreshing {len(stale_event_ids)} stale future event(s) older than "
+        f"{STALE_EVENT_REFRESH_DAYS} day(s)."
+    )
+    for event_id in stale_event_ids:
+        sync_event_with_backend(event_id)
 
 
 @app.get("/")
@@ -523,19 +673,17 @@ def get_apk_status(event_id: str):
 
 
 def get_events(force_refresh: bool = False):
-
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
         cursor = conn.cursor()
-        # Table creation moved to init_db
-
-        # fetch all events from sqlite
         cursor.execute("SELECT event_id FROM events")
         existing_event_ids = {row[0] for row in cursor.fetchall()}
-        if not existing_event_ids:
-            log("No existing events in DB. Forcing refresh.")
-            force_refresh = True
+    if not existing_event_ids:
+        log("No existing events in DB. Forcing refresh.")
+        force_refresh = True
 
-        if force_refresh:
+    if force_refresh:
+        with sqlite3.connect(DB_PATH, timeout=30) as conn:
+            cursor = conn.cursor()
             log("Fetching events from API...")
             has_next = True
             params = {"page_size": PAGE_SIZE, "page": 1}
@@ -543,7 +691,6 @@ def get_events(force_refresh: bool = False):
             events: List[Dict] = []
 
             while has_next:
-                # Use global client
                 resp = HTTP_CLIENT.get(url, params=params)
                 resp.raise_for_status()
                 resp_data = resp.json()
@@ -556,35 +703,31 @@ def get_events(force_refresh: bool = False):
             log(f"Fetched {len(events)} events from API.")
             log("Storing events in DB...")
 
-            # Store events in the database
             for event in events:
-                event_id = event["id"]
-                cursor.execute(
-                    """
-                    INSERT OR REPLACE INTO events (event_id, data, last_updated)
-                    VALUES (?, ?, ?)
-                """,
-                    (event_id, json.dumps(event), time.strftime("%Y-%m-%d %H:%M:%S")),
-                )
+                store_event(cursor, event)
             conn.commit()
             log("Events stored in DB.")
 
-            # Remove event IDs that are now in the database from existing_event_ids
             fetched_event_ids = {str(event["id"]) for event in events}
             removed_events = 0
             for event_id in existing_event_ids:
                 if event_id in fetched_event_ids:
                     continue
                 removed_events += 1
-                cursor.execute("DELETE FROM events WHERE event_id = ?", (event_id,))
+                delete_event_records(cursor, event_id)
             conn.commit()
             log(f"Removed {removed_events} obsolete events from DB.")
-            participations = []
-            for event in events:
-                p = get_participations(event["id"], force_refresh=force_refresh)
-                participations.extend(p)
-            log(f"Total participations fetched: {len(participations)}")
-        else:
+
+        participations = []
+        for event in events:
+            p = get_participations(event["id"], force_refresh=True)
+            participations.extend(p)
+        log(f"Total participations fetched: {len(participations)}")
+    else:
+        refresh_stale_future_events()
+
+        with sqlite3.connect(DB_PATH, timeout=30) as conn:
+            cursor = conn.cursor()
             log("Loading events from DB...")
             events = []
 
@@ -592,32 +735,33 @@ def get_events(force_refresh: bool = False):
                 events.append(json.loads(row[1]))
             log(f"Fetched {len(events)} events from DB.")
 
-            for index, event in enumerate(events):
-                start = event["start"]
-                # Check if date start is max 1 day in the future, current day, or in the past
-                log(start)
-                today = time.strftime("%Y-%m-%d")
-                start_dt = datetime.strptime(start, "%Y-%m-%dT%H:%M:%S")
-                today_dt = datetime.strptime(today, "%Y-%m-%d")
-                present_leden = 0
-                present_vrijrijders = 0
+        for index, event in enumerate(events):
+            start = event["start"]
+            log(start)
+            today = time.strftime("%Y-%m-%d")
+            start_dt = parse_event_datetime(start)
+            if start_dt is None:
+                log(f"Skipping event {event['id']} with invalid start date: {start}")
+                continue
+            today_dt = datetime.strptime(today, "%Y-%m-%d")
+            present_leden = 0
+            present_vrijrijders = 0
 
-                # Fetch participations from DB to calculate presence counts for all events
-                participations = get_participations(event["id"], force_refresh=False)
-                for participation in participations:
-                    if participation.get("presence_count", 0) > 0:
-                        if participation.get("member_id") is not None:
-                            present_leden += 1
-                        else:
-                            present_vrijrijders += 1
+            participations = get_participations(event["id"], force_refresh=False)
+            for participation in participations:
+                if participation.get("presence_count", 0) > 0:
+                    if participation.get("member_id") is not None:
+                        present_leden += 1
+                    else:
+                        present_vrijrijders += 1
 
-                if start_dt <= today_dt + timedelta(days=1):
-                    log(
-                        f"Event {event['id']} is today or near. (Counts: L={present_leden}, V={present_vrijrijders})"
-                    )
+            if start_dt <= today_dt + timedelta(days=1):
+                log(
+                    f"Event {event['id']} is today or near. (Counts: L={present_leden}, V={present_vrijrijders})"
+                )
 
-                events[index]["present_leden"] = present_leden
-                events[index]["present_vrijrijders"] = present_vrijrijders
+            events[index]["present_leden"] = present_leden
+            events[index]["present_vrijrijders"] = present_vrijrijders
     return filter_events(events)
 
 
