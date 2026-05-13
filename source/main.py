@@ -483,10 +483,9 @@ def read_events():
 
 
 @app.get("/events/refresh")
-def refresh_events(background_tasks: fastapi.BackgroundTasks):
-    log("Handling GET /events/refresh (Background)")
-    background_tasks.add_task(get_events, force_refresh=True)
-    return {"status": "accepted", "message": "Event refresh started in background"}
+def refresh_events():
+    log("Handling GET /events/refresh")
+    return get_events(force_refresh=True)
 
 
 @app.get("/event/{event_id}")
