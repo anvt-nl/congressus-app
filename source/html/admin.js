@@ -22,13 +22,50 @@ function shortenToken(token) {
   return `${token.slice(0, 8)}...${token.slice(-8)}`;
 }
 
+function formatDateInputValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getDefaultTokenExpiryDate() {
+  const defaultDate = new Date();
+  defaultDate.setDate(defaultDate.getDate() + 5);
+  return defaultDate;
+}
+
+function parseExpiryDateValue(expiresAt) {
+  if (!expiresAt) return "";
+  const normalized = String(expiresAt).replace(" ", "T");
+  const parsedDate = new Date(normalized);
+  if (Number.isNaN(parsedDate.getTime())) return "";
+  return formatDateInputValue(parsedDate);
+}
+
+function initializeTokenExpiryDateInput() {
+  const tokenExpiryDateInput = document.getElementById("tokenExpiryDate");
+  if (!tokenExpiryDateInput) return;
+
+  const today = new Date();
+  tokenExpiryDateInput.min = formatDateInputValue(today);
+
+  if (!tokenExpiryDateInput.value) {
+    tokenExpiryDateInput.value = formatDateInputValue(getDefaultTokenExpiryDate());
+  }
+}
+
 function selectToken(token, expiresAt) {
   const tokenUrlInput = document.getElementById("tokenUrl");
   const tokenExpiresAt = document.getElementById("tokenExpiresAt");
+  const tokenExpiryDateInput = document.getElementById("tokenExpiryDate");
   if (!tokenUrlInput || !tokenExpiresAt) return;
 
   tokenUrlInput.value = buildShareUrl(token);
   tokenExpiresAt.textContent = `Geldig tot: ${expiresAt}`;
+  if (tokenExpiryDateInput) {
+    tokenExpiryDateInput.value = parseExpiryDateValue(expiresAt);
+  }
   setTokenStatus("Toegangslink geladen uit actieve tokens.");
 }
 
@@ -119,7 +156,13 @@ async function generateToken() {
   const generateBtn = document.getElementById("generateTokenBtn");
   const tokenUrlInput = document.getElementById("tokenUrl");
   const tokenExpiresAt = document.getElementById("tokenExpiresAt");
-  if (!generateBtn || !tokenUrlInput || !tokenExpiresAt) return;
+  const tokenExpiryDateInput = document.getElementById("tokenExpiryDate");
+  if (!generateBtn || !tokenUrlInput || !tokenExpiresAt || !tokenExpiryDateInput) return;
+
+  if (!tokenExpiryDateInput.value) {
+    setTokenStatus("Kies eerst een geldigheidsdatum.", true);
+    return;
+  }
 
   const originalHtml = generateBtn.innerHTML;
   generateBtn.disabled = true;
@@ -130,10 +173,18 @@ async function generateToken() {
   lucide.createIcons();
 
   try {
-    const response = await fetch("/admin/access-token", { method: "POST" });
-    if (!response.ok) throw new Error("Token genereren mislukt.");
-
+    const response = await fetch("/admin/access-token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ expires_at: tokenExpiryDateInput.value }),
+    });
     const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.detail || "Token genereren mislukt.");
+    }
+
     tokenUrlInput.value = buildShareUrl(result.token);
     tokenExpiresAt.textContent = `Geldig tot: ${result.expires_at}`;
     setTokenStatus("Toegangslink gegenereerd.");
@@ -248,6 +299,8 @@ async function clearTable(tableName) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  initializeTokenExpiryDateInput();
+
   const generateTokenBtn = document.getElementById("generateTokenBtn");
   if (generateTokenBtn) {
     generateTokenBtn.addEventListener("click", generateToken);

@@ -223,10 +223,16 @@ def cleanup_expired_access_tokens():
         conn.commit()
 
 
-def create_access_token(valid_days: int = 5) -> Dict[str, str]:
+def create_access_token(
+    valid_days: int = 5, expires_at: datetime | None = None
+) -> Dict[str, str]:
     cleanup_expired_access_tokens()
     created_at = current_datetime()
-    expires_at = created_at + timedelta(days=valid_days)
+    token_expires_at = expires_at or (created_at + timedelta(days=valid_days))
+
+    if token_expires_at <= created_at:
+        raise ValueError("Expiry date must be in the future.")
+
     token = secrets.token_urlsafe(32)
 
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
@@ -239,7 +245,7 @@ def create_access_token(valid_days: int = 5) -> Dict[str, str]:
             (
                 token,
                 created_at.strftime("%Y-%m-%d %H:%M:%S"),
-                expires_at.strftime("%Y-%m-%d %H:%M:%S"),
+                token_expires_at.strftime("%Y-%m-%d %H:%M:%S"),
             ),
         )
         conn.commit()
@@ -247,8 +253,30 @@ def create_access_token(valid_days: int = 5) -> Dict[str, str]:
     return {
         "token": token,
         "created_at": created_at.strftime("%Y-%m-%d %H:%M:%S"),
-        "expires_at": expires_at.strftime("%Y-%m-%d %H:%M:%S"),
+        "expires_at": token_expires_at.strftime("%Y-%m-%d %H:%M:%S"),
     }
+
+
+def parse_access_token_expiry_date(expires_at: str | None) -> datetime | None:
+    if not expires_at:
+        return None
+
+    try:
+        parsed_date = datetime.strptime(expires_at, "%Y-%m-%d")
+    except ValueError as exc:
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail="Invalid expiry date. Use YYYY-MM-DD.",
+        ) from exc
+
+    end_of_day = parsed_date.replace(hour=23, minute=59, second=59)
+    if end_of_day <= current_datetime():
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail="Expiry date must be today or later.",
+        )
+
+    return end_of_day
 
 
 def get_access_token(token: str) -> Dict[str, str] | None:
@@ -531,9 +559,13 @@ def clear_table(table_name: str):
 
 
 @app.post("/admin/access-token")
-def generate_access_token_endpoint():
+def generate_access_token_endpoint(payload: dict | None = fastapi.Body(default=None)):
     log("Admin: Generating access token")
-    return create_access_token(valid_days=5)
+    expires_at = None
+    if isinstance(payload, dict):
+        expires_at = parse_access_token_expiry_date(payload.get("expires_at"))
+
+    return create_access_token(valid_days=5, expires_at=expires_at)
 
 
 @app.get("/admin/access-tokens")
