@@ -1,206 +1,281 @@
 # congressus-app
 
-A web dashboard and backend for managing ANVT events, tickets, and participations, powered by FastAPI and a modern HTML/JS frontend.
+`congressus-app` is een lokale webapp voor het beheren en scannen van ANVT-evenementen, tickets en deelnemers op basis van de Congressus API. De applicatie bestaat uit een FastAPI-backend, een SQLite-cache en een HTML/JavaScript-frontend.
 
-## Features
+De app ondersteunt twee hoofdrollen:
 
-- Fetches and caches events, tickets, and participations from the Congressus API.
-- Modern dashboard UI (TailwindCSS, Lucide icons).
-- View, filter, and manage events and participations.
-- Force sync and ticket collection features.
-- All data is served via a FastAPI backend with a local SQLite cache.
+- **Admin**: beheert de cache, genereert toegangstokens en deelt links.
+- **Gebruiker met token**: kan via een geldige toegangslink evenementen bekijken en QR-codes scannen.
 
-## Project Structure
+## Overzicht
+
+Belangrijkste functies:
+
+- evenementen, tickets en deelnemers ophalen en lokaal cachen;
+- QR-codes scannen en tickets direct controleren;
+- toegang beveiligen met deelbare tokens;
+- tokens genereren, bekijken en intrekken via `admin.html`;
+- kentekens uitlezen uit ticketdata en APK-status tonen;
+- lokale cachetabellen beheren vanuit de adminpagina.
+
+## Projectstructuur
 
 ```txt
 source/
-  main.py              # FastAPI backend and API logic
-  requirements.txt     # Python dependencies
-  api-key-2.txt        # Congressus API key (not in version control)
+  main.py                  FastAPI-backend en API-logica
+  requirements.txt         Python dependencies
+  api-key-2.txt            Congressus API key (niet in git)
   html/
-    index.html         # Main dashboard
+    admin.html             Beheerpagina voor tokens en cache
+    admin.js
+    auth.js                Tokenvalidatie voor afgeschermde pagina's
+    index.html             Homepage voor gebruikers met token
+    index.js
     participations_overview.html
-    ticket.html
-    style.css          # Custom styles (uses TailwindCSS)
-    index.js           # JS for index.html
     participations_overview.js
+    scan.html              QR-scanner
+    scan.js
+    scanned_ticket.html    Resultaatpagina na het scannen
+    scanned_ticket.js
+    ticket.html
     ticket.js
-    event_heading.js   # (if used)
+    token.html             Lokale tokeninformatie op het apparaat
+    token.js
+    style.css
 testing/
-  ...                  # Test scripts and utilities
+  ...                      Test- en voorbeelddata
 ```
 
-## Setup
+## Installatie en starten
 
-1. **Install Python dependencies:**
+1. **Installeer dependencies**
 
-   ```sh
+   ```bash
    pip install -r source/requirements.txt
    ```
 
-2. **Add your Congressus API key:**
-   - Place your API key in `source/api-key-2.txt`.
+2. **Plaats de Congressus API key**
 
-3. **Run the backend:**
+   Zet de API key in:
 
-   ```sh
+   ```txt
+   source/api-key-2.txt
+   ```
+
+3. **Kies optioneel een lokale database**
+
+   ```bash
    export CONGRESSUS_CACHE_DB=congressus_cache.db
+   ```
+
+   Als je dit niet zet, gebruikt de app standaard `/db/congressus_cache.db`.
+
+4. **Start de backend**
+
+   ```bash
    cd source
    uvicorn main:app --reload
    ```
 
-   The app will be available at [http://localhost:8000/html/index.html](http://localhost:8000/html/index.html).
+5. **Open de app**
 
-4. **Open the dashboard:**
-   - Visit the above URL in your browser.
+   - Admin: [http://localhost:8000/html/admin.html](http://localhost:8000/html/admin.html)
+   - Gebruikershomepage: [http://localhost:8000/html/index.html](http://localhost:8000/html/index.html)
 
-## License Plate (Kenteken) Management
+   Let op: voor `admin.html` moet je eerst inloggen met **basic authentication** met een geldige gebruikersnaam en wachtwoord.
 
-The application automatically extracts license plates (kentekens) from Congressus ticket data to enable automatic APK status checks.
+## Gebruik als admin
 
-### How to link a ticket to a license plate
+De adminpagina is het startpunt voor beheer. Hier beheer je zowel toegang als cachedata.
 
-1. **Configure Congressus:** Ensure that your Congressus ticket form has a field for the license plate. The system currently looks for specific field IDs:
-   - Member field: `custom_form_field_38585`
-   - Non-member field: `custom_form_field_36056`
-2. **Trigger Sync:** In the dashboard, click **Sync Data** or **Collect Tickets** for an event.
-3. **Automatic Processing:**
-   - The system fetches ticket data from Congressus.
-   - It extracts the license plate from the specified form fields.
-   - It normalizes the license plate (e.g., `AB12CD` -> `AB-12-CD`).
-   - It automatically triggers a background check with the RDW API for APK status, vehicle make, and model.
+### 0. Inloggen op de adminpagina
 
-### Viewing License Plates
+Voordat je `admin.html` kunt gebruiken, moet je eerst authenticeren met **basic authentication**.
 
-License plate information and APK status are displayed on the ticket details page when a QR code is scanned or a participant is viewed in the dashboard.
+1. Open `admin.html`.
+2. Log in met de beheergebruikersnaam en het bijbehorende wachtwoord.
+3. Pas daarna krijg je toegang tot tokenbeheer en cachebeheer.
 
-## Command-line Testing / Custom DB Location
+Zonder deze inloggegevens kun je de adminpagina niet gebruiken, ook niet als je de URL rechtstreeks opent.
 
-You can specify a custom location for the SQLite cache database using the `CONGRESSUS_CACHE_DB` environment variable. For example, to use a local file for testing:
+### 1. Toegangstoken genereren
 
-```sh
-export CONGRESSUS_CACHE_DB=congressus_cache.db
-cd source
-uvicorn main:app --reload
+Open `admin.html` en gebruik het blok **Toegangstoken**:
+
+1. Kies bij **Geldig tot en met** de einddatum van het token.
+2. Klik op **Genereer token**.
+3. De app maakt een deelbare URL aan voor `scan.html` met een `access_token`.
+4. Gebruik **Kopieer** om de link te delen.
+5. Gebruik **Homepage** als je zelf wilt testen met dat token op `index.html`.
+
+Belangrijk:
+
+- standaard staat de datumkiezer op **vandaag + 5 dagen**;
+- een token is geldig **tot het einde van de gekozen dag**;
+- een verlopen of ingetrokken token werkt direct niet meer.
+
+### 2. Actieve tokens beheren
+
+Onder **Actieve tokens** zie je:
+
+- het token;
+- aanmaakdatum;
+- verloopdatum.
+
+Acties:
+
+- klik op een token om die URL weer in het bovenste veld te laden;
+- klik op **Revoke** om een token direct ongeldig te maken;
+- klik op **Vernieuwen** om de lijst opnieuw op te halen.
+
+### 3. Cachetabellen beheren
+
+Onderaan `admin.html` kun je lokale tabellen leegmaken.
+
+Gebruik dit alleen als je weet wat je doet:
+
+- het leegmaken verwijdert lokale cachedata;
+- gegevens worden later opnieuw opgehaald uit Congressus;
+- dit is vooral nuttig bij foutieve of verouderde cachedata.
+
+## Gebruik voor iemand met alleen een token
+
+Een gebruiker zonder adminrechten heeft alleen een gedeelde link nodig.
+
+### 1. Eerste keer openen
+
+De beheerder deelt een URL zoals:
+
+```txt
+http://localhost:8000/html/scan.html?access_token=...
 ```
 
-## API Endpoints
+of indirect via een homepage-link met hetzelfde token.
 
-- `GET /events` — List all events (cached)
-- `GET /events/refresh` — Force refresh events from Congressus
-- `GET /event/{event_id}` — Event details
-- `GET /event/{event_id}/collect-tickets` — Collect tickets for event
-- `GET /participations/{event_id}` — Participation details (cached)
-- `GET /participations/{event_id}/refresh` — Force refresh participations
-- `GET /ticket/{event_id}/{obj_id}` — Ticket details
-- `GET /ticket/{event_id}/{obj_id}/{new_status}` — Update ticket status
+Bij het openen gebeurt het volgende:
 
-## SQLite Database Structure
+1. de app valideert het token via `/auth/validate`;
+2. als het token geldig is, wordt het lokaal opgeslagen in de browser;
+3. daarna wordt het token uit de URL verwijderd;
+4. de gebruiker kan vervolgens tussen afgeschermde pagina’s navigeren zonder het token telkens opnieuw in de URL te hebben.
 
-The application uses SQLite for caching data from the Congressus API. The database is configured with WAL (Write-Ahead Logging) mode for better concurrency and performance.
+### 2. Welke pagina’s zijn met token toegankelijk
 
-### Tables
+Deze pagina’s gebruiken tokenvalidatie via `auth.js`:
 
-#### `events`
+- `index.html`
+- `participations_overview.html`
+- `ticket.html`
+- `scan.html`
+- `scanned_ticket.html`
 
-Caches event data from the Congressus API.
+### 3. Als het token ongeldig is
 
-| Column         | Type               | Description                                       |
-| -------------- | ------------------ | ------------------------------------------------- |
-| `event_id`     | TEXT (Primary Key) | Unique identifier for the event                   |
-| `data`         | TEXT               | JSON string containing complete event details     |
-| `last_updated` | TEXT               | ISO timestamp of when the record was last updated |
+Bij een ontbrekend, verlopen of ingetrokken token toont de app een **Geen toegang**-scherm. De gebruiker moet dan een nieuwe geldige link aan een beheerder vragen.
 
-**Content:** Full event information including name, start/end dates, location, ticket counts, visibility settings, and participant statistics (present_leden, present_vrijrijders).
+### 4. Lokale tokeninformatie bekijken of verwijderen
 
-#### `participations`
+Via `token.html` kan een gebruiker:
 
-Caches participation records for events.
+- zien welk token lokaal op het apparaat staat;
+- zien tot wanneer het token geldig is;
+- het lokaal opgeslagen token verwijderen.
 
-| Column             | Type               | Description                                       |
-| ------------------ | ------------------ | ------------------------------------------------- |
-| `participation_id` | TEXT (Primary Key) | Unique identifier for the participation record    |
-| `event_id`         | TEXT (Indexed)     | Foreign key reference to the event                |
-| `data`             | TEXT               | JSON string containing participation details      |
-| `last_updated`     | TEXT               | ISO timestamp of when the record was last updated |
+Dat verwijderen trekt het token **niet** in op de server; het verwijdert alleen de lokale opslag op dat apparaat.
 
-**Content:** Participant information including member details (addressee, email), participation status (approved/pending), presence count, associated tickets, and license plate (kenteken) if applicable.
+## Scanflow
 
-**Index:** `idx_participations_event_id` on `event_id` for faster event-based queries.
+De scanner werkt via `scan.html`.
 
-#### `tickets`
+Verloop:
 
-Caches detailed ticket information for participants.
+1. gebruiker opent `scan.html`;
+2. camera scant een QR-code;
+3. bij het uitlezen van de QR-code klinkt een **beep**;
+4. de app zoekt het ticket op en opent `scanned_ticket.html`;
+5. resultaat:
+   - **Victory** als de scanstatus `OK` is;
+   - **Buzz Deep Drop** als de gescande QR-code niet akkoord is.
 
-| Column         | Type               | Description                                                      |
-| -------------- | ------------------ | ---------------------------------------------------------------- |
-| `obj_id`       | TEXT (Primary Key) | Unique identifier for the ticket object (participation ID)       |
-| `event_id`     | TEXT (Indexed)     | Foreign key reference to the event                               |
-| `data`         | TEXT               | JSON string containing complete ticket and participation details |
-| `last_updated` | TEXT               | ISO timestamp of when the record was last updated                |
+## Evenementen en deelnemers
 
-**Content:** Complete participation details including member information, event details, and ticket-specific data such as:
+Via de homepage en deelnemerspagina’s kun je:
 
-- Ticket access keys
-- QR codes (base64-encoded PNG images)
-- Ticket type and pricing
-- Presence status (unknown/present/absent)
-- Associated ticket type metadata
+- evenementen bekijken;
+- synchroniseren met Congressus;
+- deelnemers en tickets per evenement bekijken;
+- aanwezigheidstatus raadplegen;
+- vanuit de deelnemerspagina direct naar de scanner gaan.
 
-**Index:** `idx_tickets_event_id` on `event_id` for faster event-based queries.
+## Kenteken- en APK-gegevens
 
-#### `kentekens`
+De applicatie leest kentekens uit ticketdata en kan daarbij APK-informatie tonen.
 
-Stores the mapping between participations and license plates.
+Globaal proces:
 
-| Column     | Type               | Description                                    |
-| ---------- | ------------------ | ---------------------------------------------- |
-| `id`       | TEXT (Primary Key) | Participation ID (Deelname-ID)                 |
-| `kenteken` | TEXT               | Normalized Dutch license plate (e.g. AB-12-CD) |
+1. ticketdata wordt opgehaald uit Congressus;
+2. het kenteken wordt uit de geconfigureerde velden gehaald;
+3. het kenteken wordt genormaliseerd;
+4. RDW-data wordt opgehaald en lokaal gecachet;
+5. kenteken, merk, model en APK-status worden getoond op ticketdetailpagina’s.
 
-#### `apk_status`
+## Belangrijke endpoints
 
-Caches vehicle and APK information from the RDW Open Data API.
+### Frontend / toegang
 
-| Column            | Type               | Description                         |
-| ----------------- | ------------------ | ----------------------------------- |
-| `kenteken`        | TEXT (Primary Key) | Normalized license plate            |
-| `vervaldatum_apk` | TEXT               | APK expiration date (YYYYMMDD)      |
-| `checked_at`      | TEXT               | Timestamp of the last RDW API check |
-| `merk`            | TEXT               | Vehicle make                        |
-| `handelsbenaming` | TEXT               | Vehicle model/type                  |
+- `GET /html/index.html`
+- `GET /html/admin.html`
+- `GET /html/scan.html`
+- `GET /auth/validate?token=...`
 
-#### `members`
+### Tokens
 
-Caches member data from Congressus.
+- `POST /admin/access-token` — genereert een token
+- `GET /admin/access-tokens` — lijst met actieve tokens
+- `DELETE /admin/access-token/{token}` — trekt token in
 
-| Column         | Type               | Description                                    |
-| -------------- | ------------------ | ---------------------------------------------- |
-| `member_id`    | TEXT (Primary Key) | Unique identifier for the member               |
-| `data`         | TEXT               | JSON string containing complete member details |
-| `last_updated` | TEXT               | ISO timestamp of last update                   |
+### Data
 
-### Cache Behavior
+- `GET /events`
+- `GET /events/refresh`
+- `GET /event/{event_id}`
+- `GET /event/{event_id}/collect-tickets`
+- `GET /participations/{event_id}`
+- `GET /participations/{event_id}/refresh`
+- `GET /ticket/{event_id}/{obj_id}`
+- `GET /ticket/{event_id}/{obj_id}/{new_status}`
+- `GET /ticket/by-access-key/{access_key}`
+- `GET /scan-ticket/{event_id}/{ticket_id}`
 
-- Events are cached for **1 hour** before automatic refresh
-- Participations are cached for **5 minutes** before automatic refresh
-- Tickets are cached for **5 minutes** before automatic refresh
-- All caches can be manually refreshed via the `/refresh` endpoints
-- The database automatically initializes tables on first startup
+### Admin cachebeheer
 
-### Extracting QR Codes from Database
+- `GET /admin/tables`
+- `POST /admin/clear-table/{table_name}`
 
-To extract QR codes from ticket data stored in the database:
+## SQLite-tabellen
 
-```bash
-# Using jq to extract from JSON file
-jq -r '.tickets[0].ticket_qrcode' get_participation_*.json | \
-  sed 's/data:image\/png;base64,//' | \
-  base64 -d > ticket_qrcode.png
-```
+De app gebruikt SQLite als lokale cache. Belangrijke tabellen:
 
-## Development
+- `events`
+- `participations`
+- `tickets`
+- `kentekens`
+- `apk_status`
+- `members`
+- `access_tokens`
 
-- Frontend code is in `source/html/` (HTML, JS, CSS).
-- Backend code is in `source/main.py`.
-- Test scripts are in `testing/`.
+De tabel `access_tokens` bevat:
+
+- `token`
+- `created_at`
+- `expires_at`
+
+Verlopen tokens worden automatisch opgeschoond.
+
+## Ontwikkelnotities
+
+- frontendcode staat in `source/html/`;
+- backendcode staat in `source/main.py`;
+- de tokenlogica voor afgeschermde pagina’s staat in `source/html/auth.js`;
+- de adminpagina is bedoeld voor beheerders op een vertrouwde omgeving;
+- tokengebruikers horen via een gedeelde URL binnen te komen, niet via `admin.html`.
