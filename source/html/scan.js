@@ -47,7 +47,7 @@ function playBeepSound() {
     oscillator.type = "square";
     oscillator.frequency.setValueAtTime(660, startTime);
     gainNode.gain.setValueAtTime(0.0001, startTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.12, startTime + 0.005);
+    gainNode.gain.exponentialRampToValueAtTime(1, startTime + 0.005);
     gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.14);
 
     oscillator.connect(gainNode);

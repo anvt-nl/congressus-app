@@ -21,7 +21,7 @@ function getAudioContext() {
   return audioContext;
 }
 
-function makeGainNode(context, volume = 0.2) {
+function makeGainNode(context, volume = 1) {
   const gainNode = context.createGain();
   gainNode.gain.value = volume;
   gainNode.connect(context.destination);
@@ -33,7 +33,7 @@ function playTone({
   startFrequency,
   endFrequency = startFrequency,
   duration = 0.25,
-  volume = 0.18,
+  volume = 1,
   attack = 0.01,
   release = 0.12,
 }) {
@@ -76,7 +76,7 @@ function playVictorySound() {
     oscillator.type = "triangle";
     oscillator.frequency.setValueAtTime(frequency, noteStart);
     gainNode.gain.setValueAtTime(0.0001, noteStart);
-    gainNode.gain.exponentialRampToValueAtTime(0.16, noteStart + 0.02);
+    gainNode.gain.exponentialRampToValueAtTime(1, noteStart + 0.02);
     gainNode.gain.exponentialRampToValueAtTime(0.0001, noteEnd);
 
     oscillator.connect(gainNode);
@@ -104,7 +104,7 @@ function playBuzzDeepDropSound() {
   modulationGain.gain.setValueAtTime(26, startTime);
 
   gainNode.gain.setValueAtTime(0.0001, startTime);
-  gainNode.gain.exponentialRampToValueAtTime(0.15, startTime + 0.01);
+  gainNode.gain.exponentialRampToValueAtTime(1, startTime + 0.01);
   gainNode.gain.exponentialRampToValueAtTime(0.0001, stopTime);
 
   lfo.connect(modulationGain);
