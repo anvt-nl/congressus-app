@@ -4,36 +4,128 @@
 const params = new URLSearchParams(window.location.search);
 const eventId = params.get("event_id");
 const ticketId = params.get("ticket_id");
+let audioContext;
+
+function getAudioContext() {
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) return null;
+
+  if (!audioContext) {
+    audioContext = new AudioContext();
+  }
+
+  if (audioContext.state === "suspended") {
+    audioContext.resume();
+  }
+
+  return audioContext;
+}
+
+function makeGainNode(context, volume = 0.2) {
+  const gainNode = context.createGain();
+  gainNode.gain.value = volume;
+  gainNode.connect(context.destination);
+  return gainNode;
+}
+
+function playTone({
+  type = "sine",
+  startFrequency,
+  endFrequency = startFrequency,
+  duration = 0.25,
+  volume = 0.18,
+  attack = 0.01,
+  release = 0.12,
+}) {
+  const context = getAudioContext();
+  if (!context) return;
+
+  const startTime = context.currentTime;
+  const oscillator = context.createOscillator();
+  const gainNode = makeGainNode(context, 0);
+
+  oscillator.type = type;
+  oscillator.frequency.setValueAtTime(startFrequency, startTime);
+  oscillator.frequency.exponentialRampToValueAtTime(
+    Math.max(endFrequency, 0.001),
+    startTime + duration
+  );
+
+  gainNode.gain.setValueAtTime(0.0001, startTime);
+  gainNode.gain.exponentialRampToValueAtTime(volume, startTime + attack);
+  gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + duration + release);
+
+  oscillator.connect(gainNode);
+  oscillator.start(startTime);
+  oscillator.stop(startTime + duration + release + 0.02);
+}
+
+function playVictorySound() {
+  const context = getAudioContext();
+  if (!context) return;
+
+  const start = context.currentTime;
+  const notes = [523.25, 659.25, 783.99, 1046.5];
+
+  notes.forEach((frequency, index) => {
+    const oscillator = context.createOscillator();
+    const gainNode = makeGainNode(context, 0);
+    const noteStart = start + index * 0.11;
+    const noteEnd = noteStart + 0.2;
+
+    oscillator.type = "triangle";
+    oscillator.frequency.setValueAtTime(frequency, noteStart);
+    gainNode.gain.setValueAtTime(0.0001, noteStart);
+    gainNode.gain.exponentialRampToValueAtTime(0.16, noteStart + 0.02);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, noteEnd);
+
+    oscillator.connect(gainNode);
+    oscillator.start(noteStart);
+    oscillator.stop(noteEnd + 0.02);
+  });
+}
+
+function playBuzzDeepDropSound() {
+  const context = getAudioContext();
+  if (!context) return;
+
+  const oscillator = context.createOscillator();
+  const lfo = context.createOscillator();
+  const modulationGain = context.createGain();
+  const gainNode = makeGainNode(context, 0);
+  const startTime = context.currentTime;
+  const stopTime = startTime + 0.5;
+
+  oscillator.type = "square";
+  oscillator.frequency.setValueAtTime(220, startTime);
+  oscillator.frequency.exponentialRampToValueAtTime(60, stopTime);
+  lfo.type = "square";
+  lfo.frequency.setValueAtTime(20, startTime);
+  modulationGain.gain.setValueAtTime(26, startTime);
+
+  gainNode.gain.setValueAtTime(0.0001, startTime);
+  gainNode.gain.exponentialRampToValueAtTime(0.15, startTime + 0.01);
+  gainNode.gain.exponentialRampToValueAtTime(0.0001, stopTime);
+
+  lfo.connect(modulationGain);
+  modulationGain.connect(oscillator.frequency);
+  oscillator.connect(gainNode);
+
+  oscillator.start(startTime);
+  lfo.start(startTime);
+  oscillator.stop(stopTime + 0.02);
+  lfo.stop(stopTime + 0.02);
+}
 
 function playSound(type) {
   try {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) return;
-    const ctx = new AudioContext();
-    const osc = ctx.createOscillator();
-    const gainNode = ctx.createGain();
-
-    osc.connect(gainNode);
-    gainNode.connect(ctx.destination);
-
-    if (type === 'beep') {
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, ctx.currentTime); // A5 note
-      gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
-      osc.start();
-      gainNode.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.3);
-      osc.stop(ctx.currentTime + 0.3);
-    } else if (type === 'buzzer') {
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(150, ctx.currentTime);
-      gainNode.gain.setValueAtTime(0.2, ctx.currentTime);
-      osc.start();
-      osc.frequency.linearRampToValueAtTime(100, ctx.currentTime + 0.5);
-      gainNode.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.5);
-      osc.stop(ctx.currentTime + 0.5);
+    if (type === "victory") {
+      playVictorySound();
+    } else if (type === "buzz-deep-drop") {
+      playBuzzDeepDropSound();
     }
-  } catch (e) {
-    console.error("Audio playback failed", e);
+  } catch (error) {
+    console.error("Audio playback failed", error);
   }
 }
 
@@ -93,7 +185,7 @@ async function fetchTicketDetails() {
       if (ticketDetailsDiv) {
         ticketDetailsDiv.style.backgroundColor = '#d2ffd2'; // light green
       }
-      playSound('beep');
+      playSound("victory");
     }
     else {
       // Set the default background of ticketDetails to light red
@@ -102,7 +194,7 @@ async function fetchTicketDetails() {
       if (ticketDetailsDiv) {
         ticketDetailsDiv.style.backgroundColor = '#ffe5e5'; // light red
       }
-      playSound('buzzer');
+      playSound("buzz-deep-drop");
    
       // Show warning overlay if data.scan contains a string
       if (typeof data.scan === 'string' && data.scan) {

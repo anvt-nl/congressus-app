@@ -3,6 +3,7 @@ lucide.createIcons();
 let html5QrCode;
 let isScanning = false;
 let isProcessing = false;
+let audioContext;
 
 // UI Elements
 const startScanBtn = document.getElementById("startScanBtn");
@@ -18,6 +19,45 @@ const resultsContainer = document.getElementById("resultsContainer");
 const errorContainer = document.getElementById("errorContainer");
 const scanResult = document.getElementById("scanResult");
 const errorMessage = document.getElementById("errorMessage");
+
+function getAudioContext() {
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) return null;
+
+  if (!audioContext) {
+    audioContext = new AudioContext();
+  }
+
+  if (audioContext.state === "suspended") {
+    audioContext.resume();
+  }
+
+  return audioContext;
+}
+
+function playBeepSound() {
+  try {
+    const context = getAudioContext();
+    if (!context) return;
+
+    const oscillator = context.createOscillator();
+    const gainNode = context.createGain();
+    const startTime = context.currentTime;
+
+    oscillator.type = "square";
+    oscillator.frequency.setValueAtTime(660, startTime);
+    gainNode.gain.setValueAtTime(0.0001, startTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.12, startTime + 0.005);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.14);
+
+    oscillator.connect(gainNode);
+    gainNode.connect(context.destination);
+    oscillator.start(startTime);
+    oscillator.stop(startTime + 0.16);
+  } catch (error) {
+    console.error("Audio playback failed", error);
+  }
+}
 
 // Start scanning
 startScanBtn.addEventListener("click", startScanning);
@@ -205,6 +245,7 @@ function stopScanning() {
 
 function onScanSuccess(decodedText, decodedResult) {
   console.log(`Scan successful: ${decodedText}`, decodedResult);
+  playBeepSound();
 
   // Stop scanning
   stopScanning();
