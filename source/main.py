@@ -9,7 +9,6 @@ All this information will be available via API calls to this script via FastAPI:
 
 
 API Endpoints:
-
 GET /
     Redirects to /html/index.html
 
@@ -60,6 +59,7 @@ import fastapi
 import httpx
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.staticfiles import StaticFiles
 
 # from fastapi import Request
 # from fastapi.responses import StreamingResponse
@@ -70,6 +70,7 @@ DB_PATH = os.getenv("CONGRESSUS_CACHE_DB", "/db/congressus_cache.db")
 PAGE_SIZE = 100
 MAX_SCAN_DAYS = int(os.getenv("MAX_SCAN_DAYS", 7))
 STALE_EVENT_REFRESH_DAYS = int(os.getenv("STALE_EVENT_REFRESH_DAYS", 2))
+APK_CHECK_MAX_WORKERS = max(1, int(os.getenv("APK_CHECK_MAX_WORKERS", 4)))
 
 # Get current working directory of the script
 WORKING_DIRECTORY = pathlib.Path(__file__).parent
@@ -91,6 +92,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 HTTP_CLIENT = httpx.Client(headers=headers, timeout=10)
+MEMBERS_CACHE: Dict[str, object | None] = {"data": None, "last_updated": None}
+HTML_STATIC_FILES = StaticFiles(directory=str(WORKING_DIRECTORY / "html"))
 
 
 def normalize_kenteken(kenteken: str) -> str:
@@ -159,6 +162,9 @@ def init_db():
             "CREATE INDEX IF NOT EXISTS idx_tickets_event_id ON tickets(event_id)"
         )
         cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tickets_access_key ON tickets(access_key)"
+        )
+        cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS kentekens (
                 id TEXT PRIMARY KEY,
@@ -211,6 +217,21 @@ def current_timestamp() -> str:
 
 def current_datetime() -> datetime:
     return datetime.now()
+
+
+def clear_members_cache():
+    MEMBERS_CACHE["data"] = None
+    MEMBERS_CACHE["last_updated"] = None
+
+
+def normalize_members_map(members: Dict) -> Dict:
+    normalized_members = {}
+    for member_id, member_data in members.items():
+        if member_id == "last_updated":
+            normalized_members["last_updated"] = member_data
+        else:
+            normalized_members[str(member_id)] = member_data
+    return normalized_members
 
 
 def cleanup_expired_access_tokens():
@@ -435,6 +456,306 @@ def sync_event_with_backend(event_id: str) -> bool:
     return True
 
 
+def build_ticket_summary_map(ticket_rows) -> Dict[str, Dict[str, int]]:
+    ticket_summaries: Dict[str, Dict[str, int]] = {}
+
+    for row in ticket_rows:
+        obj_id, ticket_data = row[0], row[1]
+        parsed_ticket = json.loads(ticket_data)
+        ticket_items = parsed_ticket.get("tickets", [])
+        ticket_summaries[str(obj_id)] = {
+            "ticket_count": len(ticket_items),
+            "presence_count": sum(
+                1 for ticket in ticket_items if ticket.get("status_presence") == "present"
+            ),
+        }
+
+    return ticket_summaries
+
+
+def get_event_participation_stats_python(
+    events_list: List[Dict],
+) -> Dict[str, Dict[str, int]]:
+    event_ids = [str(event["id"]) for event in events_list]
+    stats_by_event = {
+        event_id: {
+            "leden_sold_tickets": 0,
+            "niet_leden_sold_tickets": 0,
+            "present_leden": 0,
+            "present_vrijrijders": 0,
+        }
+        for event_id in event_ids
+    }
+
+    if not event_ids:
+        return stats_by_event
+
+    placeholders = ",".join("?" for _ in event_ids)
+    with sqlite3.connect(DB_PATH, timeout=30) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"""
+            SELECT participation_id, event_id, data
+            FROM participations
+            WHERE event_id IN ({placeholders})
+        """,
+            event_ids,
+        )
+        participation_rows = cursor.fetchall()
+        cursor.execute(
+            f"""
+            SELECT obj_id, data
+            FROM tickets
+            WHERE event_id IN ({placeholders})
+        """,
+            event_ids,
+        )
+        ticket_summaries = build_ticket_summary_map(cursor.fetchall())
+
+    for participation_id, event_id, participation_data in participation_rows:
+        event_stats = stats_by_event.setdefault(
+            str(event_id),
+            {
+                "leden_sold_tickets": 0,
+                "niet_leden_sold_tickets": 0,
+                "present_leden": 0,
+                "present_vrijrijders": 0,
+            },
+        )
+        participation = json.loads(participation_data)
+        is_member = participation.get("member_id") is not None
+
+        if participation.get("status") == "approved":
+            if is_member:
+                event_stats["leden_sold_tickets"] += 1
+            else:
+                event_stats["niet_leden_sold_tickets"] += 1
+
+        ticket_summary = ticket_summaries.get(str(participation_id))
+        if ticket_summary and ticket_summary["presence_count"] > 0:
+            if is_member:
+                event_stats["present_leden"] += 1
+            else:
+                event_stats["present_vrijrijders"] += 1
+
+    return stats_by_event
+
+
+def get_event_participation_stats(events_list: List[Dict]) -> Dict[str, Dict[str, int]]:
+    event_ids = [str(event["id"]) for event in events_list]
+    stats_by_event = {
+        event_id: {
+            "leden_sold_tickets": 0,
+            "niet_leden_sold_tickets": 0,
+            "present_leden": 0,
+            "present_vrijrijders": 0,
+        }
+        for event_id in event_ids
+    }
+
+    if not event_ids:
+        return stats_by_event
+
+    try:
+        placeholders = ",".join("?" for _ in event_ids)
+        with sqlite3.connect(DB_PATH, timeout=30) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f"""
+                WITH ticket_presence AS (
+                    SELECT
+                        t.event_id,
+                        t.obj_id,
+                        COALESCE(
+                            SUM(
+                                CASE
+                                    WHEN json_extract(ticket.value, '$.status_presence') = 'present'
+                                    THEN 1
+                                    ELSE 0
+                                END
+                            ),
+                            0
+                        ) AS presence_count
+                    FROM tickets t
+                    LEFT JOIN json_each(t.data, '$.tickets') AS ticket
+                    WHERE t.event_id IN ({placeholders})
+                    GROUP BY t.event_id, t.obj_id
+                )
+                SELECT
+                    p.event_id,
+                    SUM(
+                        CASE
+                            WHEN json_extract(p.data, '$.status') = 'approved'
+                            AND json_extract(p.data, '$.member_id') IS NOT NULL
+                            THEN 1
+                            ELSE 0
+                        END
+                    ) AS leden_sold_tickets,
+                    SUM(
+                        CASE
+                            WHEN json_extract(p.data, '$.status') = 'approved'
+                            AND json_extract(p.data, '$.member_id') IS NULL
+                            THEN 1
+                            ELSE 0
+                        END
+                    ) AS niet_leden_sold_tickets,
+                    SUM(
+                        CASE
+                            WHEN json_extract(p.data, '$.member_id') IS NOT NULL
+                            AND COALESCE(tp.presence_count, 0) > 0
+                            THEN 1
+                            ELSE 0
+                        END
+                    ) AS present_leden,
+                    SUM(
+                        CASE
+                            WHEN json_extract(p.data, '$.member_id') IS NULL
+                            AND COALESCE(tp.presence_count, 0) > 0
+                            THEN 1
+                            ELSE 0
+                        END
+                    ) AS present_vrijrijders
+                FROM participations p
+                LEFT JOIN ticket_presence tp
+                    ON tp.event_id = p.event_id
+                    AND tp.obj_id = p.participation_id
+                WHERE p.event_id IN ({placeholders})
+                GROUP BY p.event_id
+            """,
+                event_ids + event_ids,
+            )
+            for row in cursor.fetchall():
+                stats_by_event[str(row[0])] = {
+                    "leden_sold_tickets": row[1] or 0,
+                    "niet_leden_sold_tickets": row[2] or 0,
+                    "present_leden": row[3] or 0,
+                    "present_vrijrijders": row[4] or 0,
+                }
+        return stats_by_event
+    except sqlite3.OperationalError as exc:
+        log(f"Falling back to Python event aggregation: {exc}")
+        return get_event_participation_stats_python(events_list)
+
+
+def load_participations_with_stats(
+    cursor: sqlite3.Cursor, event_id: int | str
+) -> List[Dict]:
+    try:
+        cursor.execute(
+            f"""
+            WITH ticket_summary AS (
+                SELECT
+                    t.event_id,
+                    t.obj_id,
+                    COUNT(ticket.value) AS ticket_count,
+                    COALESCE(
+                        SUM(
+                            CASE
+                                WHEN json_extract(ticket.value, '$.status_presence') = 'present'
+                                THEN 1
+                                ELSE 0
+                            END
+                        ),
+                        0
+                    ) AS presence_count
+                FROM tickets t
+                LEFT JOIN json_each(t.data, '$.tickets') AS ticket
+                WHERE t.event_id = ?
+                GROUP BY t.event_id, t.obj_id
+            )
+            SELECT
+                p.data,
+                ts.ticket_count,
+                COALESCE(ts.presence_count, 0),
+                k.kenteken
+            FROM participations p
+            LEFT JOIN ticket_summary ts
+                ON ts.event_id = p.event_id
+                AND ts.obj_id = p.participation_id
+            LEFT JOIN kentekens k
+                ON k.id = p.participation_id
+            WHERE p.event_id = ?
+        """,
+            (event_id, event_id),
+        )
+        rows = cursor.fetchall()
+        participations = []
+        for participation_data, ticket_count, presence_count, kenteken in rows:
+            participation = json.loads(participation_data)
+            participation["presence_count"] = presence_count or 0
+            participation["tickets"] = ticket_count if ticket_count is not None else None
+            participation["kenteken"] = kenteken or ""
+            participations.append(participation)
+        return participations
+    except sqlite3.OperationalError as exc:
+        log(f"Falling back to Python participation enrichment for event {event_id}: {exc}")
+        cursor.execute(
+            "SELECT participation_id, data FROM participations WHERE event_id = ?",
+            (event_id,),
+        )
+        participation_rows = cursor.fetchall()
+        cursor.execute("SELECT obj_id, data FROM tickets WHERE event_id = ?", (event_id,))
+        ticket_summaries = build_ticket_summary_map(cursor.fetchall())
+        participation_ids = [str(participation_id) for participation_id, _ in participation_rows]
+        if participation_ids:
+            placeholders = ",".join("?" for _ in participation_ids)
+            cursor.execute(
+                f"SELECT id, kenteken FROM kentekens WHERE id IN ({placeholders})",
+                participation_ids,
+            )
+            kentekens_db = {row[0]: row[1] for row in cursor.fetchall()}
+        else:
+            kentekens_db = {}
+
+        participations = []
+        for participation_id, participation_data in participation_rows:
+            participation = json.loads(participation_data)
+            ticket_summary = ticket_summaries.get(str(participation_id))
+            participation["presence_count"] = (
+                ticket_summary["presence_count"] if ticket_summary else 0
+            )
+            participation["tickets"] = (
+                ticket_summary["ticket_count"] if ticket_summary else None
+            )
+            participation["kenteken"] = kentekens_db.get(str(participation_id), "")
+            participations.append(participation)
+        return participations
+
+
+def get_cached_member_validation_result(
+    member_info: Dict | None,
+    date_str: str | None,
+    validation_cache: Dict[tuple[str | None, str | None, str | None], Dict[str, str | bool | None]],
+) -> Dict[str, str | bool | None]:
+    member_name = member_info.get("name") if member_info else None
+    member_to = member_info.get("member_to") if member_info else None
+    cache_key = (member_name, member_to, date_str)
+    cached_result = validation_cache.get(cache_key)
+    if cached_result is None:
+        cached_result = get_member_validation_result(member_name, member_to, date_str)
+        validation_cache[cache_key] = cached_result
+    return cached_result
+
+
+def fetch_apk_status_for_kenteken(kenteken: str) -> Dict[str, str | None] | None:
+    kenteken_no_dash = kenteken.replace("-", "")
+    url = f"https://opendata.rdw.nl/resource/m9d7-ebf2.json?kenteken={kenteken_no_dash}"
+    rdw_headers = {"User-Agent": "CongressusApp/1.0"}
+    resp = httpx.get(url, headers=rdw_headers, timeout=10)
+    resp.raise_for_status()
+
+    data = resp.json()
+    if not data:
+        return None
+
+    vehicle = data[0]
+    return {
+        "vervaldatum_apk": vehicle.get("vervaldatum_apk"),
+        "merk": vehicle.get("merk"),
+        "handelsbenaming": vehicle.get("handelsbenaming"),
+    }
+
+
 def refresh_stale_future_events():
     now = datetime.now()
     stale_event_ids = []
@@ -485,8 +806,15 @@ async def html_root() -> fastapi.responses.RedirectResponse:
     return fastapi.responses.RedirectResponse(url="/html/index.html")
 
 
-@app.get("/html/{page_name}")
-async def html_page(page_name: str) -> fastapi.responses.HTMLResponse:
+@app.get("/html")
+async def html_root_no_slash() -> fastapi.responses.RedirectResponse:
+    return fastapi.responses.RedirectResponse(url="/html/index.html")
+
+
+@app.get("/html/{page_name:path}")
+async def html_page(
+    request: fastapi.Request, page_name: str
+) -> fastapi.responses.Response:
     """
     Function to serve HTML pages from the html/ directory.
 
@@ -494,14 +822,7 @@ async def html_page(page_name: str) -> fastapi.responses.HTMLResponse:
     :type page_name: str
     """
 
-    if page_name == "":
-        page_name = "index.html"
-    file_path = f"html/{page_name}"
-    if os.path.exists(file_path):
-        with open(file_path, "r", encoding="utf-8") as file:
-            content = file.read()
-        return fastapi.responses.HTMLResponse(status_code=200, content=content)
-    return fastapi.responses.Response(status_code=404, content="Page not found")
+    return await HTML_STATIC_FILES.get_response(page_name or "index.html", request.scope)
 
 
 @app.get("/admin/tables")
@@ -546,6 +867,8 @@ def clear_table(table_name: str):
             cursor = conn.cursor()
             cursor.execute(f"DELETE FROM {table_name}")
             conn.commit()
+        if table_name == "members":
+            clear_members_cache()
         return {
             "status": "success",
             "message": f"Table {table_name} cleared successfully.",
@@ -726,7 +1049,9 @@ def scan_ticket(event_id: str, obj_id: str):
                 break
         else:
             log(f"Handling GET /ticket/{event_id}/{obj_id}/present")
-            updated_ticket_data = do_update_ticket(event_id, obj_id, "present")
+            updated_ticket_data = do_update_ticket(
+                event_id, obj_id, "present", ticket_data=ticket_data
+            )
             if updated_ticket_data.get("status") == "error":
                 ticket_data["scan"] = "Fout bij scannen: " + updated_ticket_data.get(
                     "message", "onbekende fout"
@@ -893,11 +1218,10 @@ def get_events(force_refresh: bool = False):
             conn.commit()
             log(f"Removed {removed_events} obsolete events from DB.")
 
-        participations = []
+        participation_count = 0
         for event in events:
-            p = get_participations(event["id"], force_refresh=True)
-            participations.extend(p)
-        log(f"Total participations fetched: {len(participations)}")
+            participation_count += len(get_participations(event["id"], force_refresh=True))
+        log(f"Total participations fetched: {participation_count}")
     else:
         refresh_stale_future_events()
 
@@ -910,34 +1234,8 @@ def get_events(force_refresh: bool = False):
                 events.append(json.loads(row[1]))
             log(f"Fetched {len(events)} events from DB.")
 
-        for index, event in enumerate(events):
-            start = event["start"]
-            log(start)
-            today = time.strftime("%Y-%m-%d")
-            start_dt = parse_event_datetime(start)
-            if start_dt is None:
-                log(f"Skipping event {event['id']} with invalid start date: {start}")
-                continue
-            today_dt = datetime.strptime(today, "%Y-%m-%d")
-            present_leden = 0
-            present_vrijrijders = 0
-
-            participations = get_participations(event["id"], force_refresh=False)
-            for participation in participations:
-                if participation.get("presence_count", 0) > 0:
-                    if participation.get("member_id") is not None:
-                        present_leden += 1
-                    else:
-                        present_vrijrijders += 1
-
-            if start_dt <= today_dt + timedelta(days=1):
-                log(
-                    f"Event {event['id']} is today or near. (Counts: L={present_leden}, V={present_vrijrijders})"
-                )
-
-            events[index]["present_leden"] = present_leden
-            events[index]["present_vrijrijders"] = present_vrijrijders
-    return filter_events(events)
+    event_stats = get_event_participation_stats(events)
+    return filter_events(events, event_stats)
 
 
 def get_event(event_id: str):
@@ -950,51 +1248,45 @@ def get_event(event_id: str):
     return {"error": "Event not found"}
 
 
-def filter_events(events_list: List[Dict]) -> List[Dict]:
-    with sqlite3.connect(DB_PATH, timeout=30) as conn:
-        cursor = conn.cursor()
-        return_events = []
-        for event in events_list:
-            if event["published"] is False:
-                continue
-            leden_num_tickets = 0
-            leden_sold_tickets = 0
-            niet_leden_num_tickets = 0
-            niet_leden_sold_tickets = 0
-            log(f"Start: {event['start']}")
-            log(f"Ticket types for event {event['id']}: {event['name']}")
-            for tickets in event["ticket_types"]:
-                if tickets["price"] == 0 and tickets["num_tickets"] is not None:
-                    leden_num_tickets += tickets.get("num_tickets", 0)
-                elif tickets["price"] > 39 and tickets["num_tickets"] is not None:
-                    niet_leden_num_tickets += tickets.get("num_tickets", 0)
-            cursor.execute(
-                "SELECT data FROM participations WHERE event_id = ?", (event["id"],)
-            )
-            participations = [json.loads(row[0]) for row in cursor.fetchall()]
-            for participation in participations:
-                if participation["status"] != "approved":
-                    continue
-                if participation["member_id"] is not None:
-                    leden_sold_tickets += 1
-                else:
-                    niet_leden_sold_tickets += 1
-            log(
-                f"Event {event['id']} - Leden: {leden_sold_tickets}/{leden_num_tickets}, Niet leden: {niet_leden_sold_tickets}/{niet_leden_num_tickets}"
-            )
-            return_events.append(
-                {
-                    "id": event["id"],
-                    "name": event["name"],
-                    "start": event["start"],
-                    "leden_num_tickets": leden_num_tickets,
-                    "leden_sold_tickets": leden_sold_tickets,
-                    "niet_leden_num_tickets": niet_leden_num_tickets,
-                    "niet_leden_sold_tickets": niet_leden_sold_tickets,
-                    "present_leden": event.get("present_leden", 0),
-                    "present_vrijrijders": event.get("present_vrijrijders", 0),
-                }
-            )
+def filter_events(
+    events_list: List[Dict], event_stats: Dict[str, Dict[str, int]] | None = None
+) -> List[Dict]:
+    event_stats = event_stats or get_event_participation_stats(events_list)
+    return_events = []
+    for event in events_list:
+        if event["published"] is False:
+            continue
+        leden_num_tickets = 0
+        niet_leden_num_tickets = 0
+        log(f"Start: {event['start']}")
+        log(f"Ticket types for event {event['id']}: {event['name']}")
+        for tickets in event["ticket_types"]:
+            if tickets["price"] == 0 and tickets["num_tickets"] is not None:
+                leden_num_tickets += tickets.get("num_tickets", 0)
+            elif tickets["price"] > 39 and tickets["num_tickets"] is not None:
+                niet_leden_num_tickets += tickets.get("num_tickets", 0)
+
+        stats = event_stats.get(str(event["id"]), {})
+        leden_sold_tickets = stats.get("leden_sold_tickets", 0)
+        niet_leden_sold_tickets = stats.get("niet_leden_sold_tickets", 0)
+        present_leden = stats.get("present_leden", 0)
+        present_vrijrijders = stats.get("present_vrijrijders", 0)
+        log(
+            f"Event {event['id']} - Leden: {leden_sold_tickets}/{leden_num_tickets}, Niet leden: {niet_leden_sold_tickets}/{niet_leden_num_tickets}"
+        )
+        return_events.append(
+            {
+                "id": event["id"],
+                "name": event["name"],
+                "start": event["start"],
+                "leden_num_tickets": leden_num_tickets,
+                "leden_sold_tickets": leden_sold_tickets,
+                "niet_leden_num_tickets": niet_leden_num_tickets,
+                "niet_leden_sold_tickets": niet_leden_sold_tickets,
+                "present_leden": present_leden,
+                "present_vrijrijders": present_vrijrijders,
+            }
+        )
     return return_events
 
 
@@ -1075,46 +1367,15 @@ def get_participations(event_id: int, force_refresh: bool = False):
             log(f"Removed {removed_participations} obsolete participations from DB.")
         else:
             log(f"Loading participations for event {event_id} from DB...")
-            participations = []
-            for row in cursor.execute(
-                "SELECT participation_id, data, last_updated FROM participations WHERE event_id = ?",
-                (event_id,),
-            ):
-                participations.append(json.loads(row[1]))
-            log(
-                f"Fetched {len(participations)} participations from DB for event {event_id}."
-            )
 
-        try:
-            cursor.execute("SELECT data FROM tickets WHERE event_id = ?", (event_id,))
-        except sqlite3.OperationalError:
-            log("Tickets table does not exist yet.")
-            tickets = []
-        else:
-            tickets = [json.loads(row[0]) for row in cursor.fetchall()]
-        log(f"Fetched {len(tickets)} tickets from DB for event {event_id}.")
-
-        # Fetch kentekens from database
-        cursor.execute("SELECT id, kenteken FROM kentekens")
-        kentekens_db = {row[0]: row[1] for row in cursor.fetchall()}
-
-        for participation in participations:
-            participation_pressence = 0
-            participation_tickets = None
-            for ticket in tickets:
-                if ticket.get("id") == participation.get("id"):
-                    participation_tickets = len(ticket.get("tickets", []))
-                    for t in ticket.get("tickets", []):
-                        if t.get("status_presence") == "present":
-                            participation_pressence += 1
-            participation["presence_count"] = participation_pressence
-            participation["tickets"] = participation_tickets
-            participation["kenteken"] = kentekens_db.get(
-                str(participation.get("id")), ""
-            )
+        participations = load_participations_with_stats(cursor, event_id)
+        log(
+            f"Fetched {len(participations)} participations from DB for event {event_id}."
+        )
 
     # Filter fields to reduce payload size
     members = get_members()
+    validation_cache = {}
     filtered_participations = []
     allowed_fields = [
         "id",
@@ -1132,10 +1393,10 @@ def get_participations(event_id: int, force_refresh: bool = False):
         member_id = str(p.get("member_id")) if p.get("member_id") is not None else None
         if member_id is not None:
             member_info = members.get(member_id)
-            validation_result = get_member_validation_result(
-                member_info.get("name") if member_info else None,
-                member_info.get("member_to") if member_info else None,
+            validation_result = get_cached_member_validation_result(
+                member_info,
                 event_date_str,
+                validation_cache,
             )
             filtered_participations[-1]["lid_valid"] = validation_result["valid"]
             filtered_participations[-1]["lid_invalid_reason"] = validation_result[
@@ -1254,10 +1515,10 @@ def filter_tickets(tickets_list: Dict) -> Dict:
     if member_id is not None:
         members = get_members()
         member_info = members.get(member_id)
-        validation_result = get_member_validation_result(
-            member_info.get("name") if member_info else None,
-            member_info.get("member_to") if member_info else None,
+        validation_result = get_cached_member_validation_result(
+            member_info,
             return_list["event_date"],
+            {},
         )
         return_list["lid_valid"] = validation_result["valid"]
         return_list["lid_invalid_reason"] = validation_result["reason"]
@@ -1265,9 +1526,12 @@ def filter_tickets(tickets_list: Dict) -> Dict:
     return return_list
 
 
-def do_update_ticket(event_id: str, obj_id: str, new_status: str):
+def do_update_ticket(
+    event_id: str, obj_id: str, new_status: str, ticket_data: Dict | None = None
+):
     log(f"New status: {new_status}")
-    ticket_data = get_ticket(event_id, obj_id, refresh=True)
+    if ticket_data is None:
+        ticket_data = get_ticket(event_id, obj_id, refresh=True)
     if not ticket_data.get("tickets"):
         return {"status": "error", "message": f"Ticket {obj_id} not found."}
 
@@ -1376,109 +1640,119 @@ def do_check_apk_status(event_id: str):
         )
 
         kenteken_data = cursor.fetchall()
-        log(f"Found {len(kenteken_data)} kentekens for event {event_id}")
 
-        # Filter for kentekens that need checking:
-        # 1. Valid Dutch plates (8 chars with 2 dashes)
-        # 2. Either no APK data OR expired APK
-        kentekens_to_check = []
-        today = time.strftime("%Y%m%d")
+    log(f"Found {len(kenteken_data)} kentekens for event {event_id}")
 
-        for kenteken, vervaldatum_apk in kenteken_data:
-            # Skip if not valid Dutch format
-            if len(kenteken) != 8 or kenteken.count("-") != 2:
-                continue
+    # Filter for kentekens that need checking:
+    # 1. Valid Dutch plates (8 chars with 2 dashes)
+    # 2. Either no APK data OR expired APK
+    kentekens_to_check = []
+    today = time.strftime("%Y%m%d")
 
-            # Check if we need to query this kenteken
-            if not vervaldatum_apk:
-                # No APK data - need to check
-                kentekens_to_check.append(kenteken)
-            elif vervaldatum_apk < today:
-                # APK expired - need to recheck
-                kentekens_to_check.append(kenteken)
-            # else: APK is still valid, skip
+    for kenteken, vervaldatum_apk in kenteken_data:
+        # Skip if not valid Dutch format
+        if len(kenteken) != 8 or kenteken.count("-") != 2:
+            continue
 
-        log(
-            f"Filtered to {len(kentekens_to_check)} kentekens needing APK check (expired or unknown)"
-        )
+        # Check if we need to query this kenteken
+        if not vervaldatum_apk:
+            # No APK data - need to check
+            kentekens_to_check.append(kenteken)
+        elif vervaldatum_apk < today:
+            # APK expired - need to recheck
+            kentekens_to_check.append(kenteken)
+        # else: APK is still valid, skip
 
-        checked = 0
-        errors = 0
-        skipped = len(kenteken_data) - len(kentekens_to_check)
+    log(
+        f"Filtered to {len(kentekens_to_check)} kentekens needing APK check (expired or unknown)"
+    )
 
-        for kenteken in kentekens_to_check:
-            try:
-                # Remove dashes for API call
-                kenteken_no_dash = kenteken.replace("-", "")
+    checked = 0
+    errors = 0
+    skipped = len(kenteken_data) - len(kentekens_to_check)
+    rows_to_store = []
 
-                # Query RDW API
-                url = f"https://opendata.rdw.nl/resource/m9d7-ebf2.json?kenteken={kenteken_no_dash}"
-                rdw_headers = {"User-Agent": "CongressusApp/1.0"}
-                resp = httpx.get(url, headers=rdw_headers, timeout=10)
-                resp.raise_for_status()
+    if kentekens_to_check:
+        max_workers = min(APK_CHECK_MAX_WORKERS, len(kentekens_to_check))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_kenteken = {
+                executor.submit(fetch_apk_status_for_kenteken, kenteken): kenteken
+                for kenteken in kentekens_to_check
+            }
+            for future in concurrent.futures.as_completed(future_to_kenteken):
+                kenteken = future_to_kenteken[future]
+                try:
+                    vehicle = future.result()
+                    if vehicle is None:
+                        log(f"No data found for kenteken {kenteken}")
+                        errors += 1
+                        continue
 
-                data = resp.json()
-
-                if data and len(data) > 0:
-                    vehicle = data[0]
-                    vervaldatum_apk = vehicle.get("vervaldatum_apk", None)
-                    merk = vehicle.get("merk", None)
-                    handelsbenaming = vehicle.get("handelsbenaming", None)
-
-                    # Store in database
-                    cursor.execute(
-                        """
-                        INSERT OR REPLACE INTO apk_status 
-                        (kenteken, vervaldatum_apk, checked_at, merk, handelsbenaming)
-                        VALUES (?, ?, ?, ?, ?)
-                    """,
+                    rows_to_store.append(
                         (
                             kenteken,
-                            vervaldatum_apk,
+                            vehicle.get("vervaldatum_apk"),
                             time.strftime("%Y-%m-%d %H:%M:%S"),
-                            merk,
-                            handelsbenaming,
-                        ),
+                            vehicle.get("merk"),
+                            vehicle.get("handelsbenaming"),
+                        )
                     )
                     checked += 1
 
                     if checked % 5 == 0:
                         log(f"Progress: {checked}/{len(kentekens_to_check)} checked")
-                else:
-                    log(f"No data found for kenteken {kenteken}")
+                except Exception as e:
+                    log(f"Error checking kenteken {kenteken}: {str(e)}")
                     errors += 1
 
-            except Exception as e:
-                log(f"Error checking kenteken {kenteken}: {str(e)}")
-                errors += 1
+    if rows_to_store:
+        with sqlite3.connect(DB_PATH, timeout=30) as conn:
+            cursor = conn.cursor()
+            cursor.executemany(
+                """
+                INSERT OR REPLACE INTO apk_status
+                (kenteken, vervaldatum_apk, checked_at, merk, handelsbenaming)
+                VALUES (?, ?, ?, ?, ?)
+            """,
+                rows_to_store,
+            )
+            conn.commit()
 
-        conn.commit()
-        log(
-            f"APK check complete for event {event_id}: {checked} checked, {skipped} skipped (valid APK), {errors} errors"
-        )
+    log(
+        f"APK check complete for event {event_id}: {checked} checked, {skipped} skipped (valid APK), {errors} errors"
+    )
 
     return {"checked": checked, "skipped": skipped, "errors": errors}
 
 
 def get_members():
+    today = time.strftime("%Y-%m-%d")
+    cached_members = MEMBERS_CACHE.get("data")
+    cached_last_updated = MEMBERS_CACHE.get("last_updated")
+    if cached_members is not None and cached_last_updated == today:
+        log("Members found in process cache.")
+        cached_members = normalize_members_map(cached_members)
+        MEMBERS_CACHE["data"] = cached_members
+        return cached_members
+
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
         cursor = conn.cursor()
         # Table creation moved to init_db
 
-        cursor.execute("SELECT data FROM members WHERE member_id = 'all'")
+        cursor.execute("SELECT data, last_updated FROM members WHERE member_id = 'all'")
         row = cursor.fetchone()
-        if row:
-            # When data is too old (older than 1 day), refresh it
-            last_updated_str = json.loads(row[0])["last_updated"]
-            now = time.strftime("%Y-%m-%d")
-            if last_updated_str == now:
-                log("Members found in DB.")
-                return json.loads(row[0])
+        if row and row[1] == today:
+            log("Members found in DB.")
+            members = normalize_members_map(json.loads(row[0]))
+            MEMBERS_CACHE["data"] = members
+            MEMBERS_CACHE["last_updated"] = today
+            return members
 
+        if row:
             log("Data is outdated. Fetching new data from API...")
         else:
             log("No members found in DB. Fetching from API...")
-        members = get_members_remote()
+        members = normalize_members_map(get_members_remote())
         cursor.execute("DELETE FROM members WHERE member_id = 'all'")
         cursor.execute(
             """
@@ -1488,10 +1762,12 @@ def get_members():
             (
                 "all",
                 json.dumps(members),
-                time.strftime("%Y-%m-%d"),
+                today,
             ),
         )
         conn.commit()
+        MEMBERS_CACHE["data"] = members
+        MEMBERS_CACHE["last_updated"] = today
         log("Members stored in DB.")
         return members
 
@@ -1590,7 +1866,7 @@ def get_members_remote():
         if not id:
             print(f"Missing id for member: {name}")
             continue
-        members[id] = {"name": name, "member_to": member_to}
+        members[str(id)] = {"name": name, "member_to": member_to}
     now = time.strftime("%Y-%m-%d")
     members["last_updated"] = now
     return members
