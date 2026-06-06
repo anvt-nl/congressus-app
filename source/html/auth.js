@@ -112,8 +112,7 @@ async function ensurePageAccess() {
     }
 
     restorePageVisibility();
-  } catch (error) {
-    console.error("Access validation failed:", error);
+  } catch {
     const params = new URLSearchParams(window.location.search);
     const urlToken = params.get(ACCESS_TOKEN_QUERY_PARAM);
     const storedToken = JSON.parse(

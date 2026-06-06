@@ -1333,8 +1333,6 @@ def get_participations(event_id: int, force_refresh: bool = False):
 
             for participation in participations:
                 # Strip whitespace from all string values in participation dict
-
-                print(participation)
                 participation = strip_values(participation)
                 participation_id = participation["id"]
                 cursor.execute(
@@ -1864,7 +1862,7 @@ def get_members_remote():
             member_to = "N/A"
         name = status.get("name", None)
         if not id:
-            print(f"Missing id for member: {name}")
+            log(f"Skipping member without id: {name or 'unknown'}")
             continue
         members[str(id)] = {"name": name, "member_to": member_to}
     now = time.strftime("%Y-%m-%d")

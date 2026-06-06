@@ -1,6 +1,7 @@
-/* Place for custom styles if needed. Currently using TailwindCSS for all styling. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-/* QR Scanner Styles */
 #reader {
   max-width: 100%;
   margin: 0 auto;

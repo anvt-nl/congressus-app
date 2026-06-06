@@ -4,11 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Event Participations Overview</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
     <script src="auth.js"></script>
-    <script src="event_heading.js"></script>
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="app.css" />
   </head>
   <body class="bg-slate-50 min-h-screen pb-20">
     <div class="max-w-4xl mx-auto px-4 py-10">
@@ -55,7 +52,6 @@
           </a>
           <button
             id="syncBtn"
-            onclick="refreshParticipations()"
             class="flex items-center gap-2 bg-white border px-4 py-2 rounded-lg shadow-sm hover:bg-slate-50 transition"
           >
             <i data-lucide="refresh-cw" class="w-4 h-4"></i> Sync Data
@@ -79,6 +75,9 @@
       <div id="participationsTable"></div>
     </div>
 
+    <script src="vendor/lucide.min.js"></script>
+    <script src="events_cache.js"></script>
+    <script src="event_heading.js"></script>
     <script src="participations_overview.js"></script>
   </body>
 </html>

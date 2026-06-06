@@ -1,10 +1,12 @@
-// ...removed backToOverviewBtn handler, as button no longer exists...
-
 // Get event_id and ticket_id from query string
 const params = new URLSearchParams(window.location.search);
 const eventId = params.get("event_id");
 const ticketId = params.get("ticket_id");
 let audioContext;
+
+function hideWarningOverlay() {
+  document.getElementById("scanWarningOverlay")?.remove();
+}
 
 function getAudioContext() {
   const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -26,38 +28,6 @@ function makeGainNode(context, volume = 1) {
   gainNode.gain.value = volume;
   gainNode.connect(context.destination);
   return gainNode;
-}
-
-function playTone({
-  type = "sine",
-  startFrequency,
-  endFrequency = startFrequency,
-  duration = 0.25,
-  volume = 1,
-  attack = 0.01,
-  release = 0.12,
-}) {
-  const context = getAudioContext();
-  if (!context) return;
-
-  const startTime = context.currentTime;
-  const oscillator = context.createOscillator();
-  const gainNode = makeGainNode(context, 0);
-
-  oscillator.type = type;
-  oscillator.frequency.setValueAtTime(startFrequency, startTime);
-  oscillator.frequency.exponentialRampToValueAtTime(
-    Math.max(endFrequency, 0.001),
-    startTime + duration
-  );
-
-  gainNode.gain.setValueAtTime(0.0001, startTime);
-  gainNode.gain.exponentialRampToValueAtTime(volume, startTime + attack);
-  gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + duration + release);
-
-  oscillator.connect(gainNode);
-  oscillator.start(startTime);
-  oscillator.stop(startTime + duration + release + 0.02);
 }
 
 function playVictorySound() {
@@ -124,9 +94,7 @@ function playSound(type) {
     } else if (type === "buzz-deep-drop") {
       playBuzzDeepDropSound();
     }
-  } catch (error) {
-    console.error("Audio playback failed", error);
-  }
+  } catch {}
 }
 
 async function fetchTicketDetails() {
@@ -143,9 +111,6 @@ async function fetchTicketDetails() {
     const eventDateStr = data.event_date
       ? String(data.event_date).split("T")[0]
       : "";
-    // Show the scan status from data.scan if it's a string, otherwise show "N/A"
-    const scanStatus = typeof data.scan === "string" && data.scan ? data.scan : "N/A";
-
     // Build ticket types table if available
     let ticketTypesTable = "";
     if (Array.isArray(data.tickets) && data.tickets.length > 0) {
@@ -160,7 +125,7 @@ async function fetchTicketDetails() {
 					</tr></thead>
 					<tbody>
 						${data.tickets
-              .map((tt, idx) => {
+              .map((tt) => {
                 const presenceText =
                   tt.status_presence === "present" ? "ja" : "nee";
                 const rowClass = "cursor-pointer hover:bg-blue-100";
@@ -199,6 +164,7 @@ async function fetchTicketDetails() {
       // Show warning overlay if data.scan contains a string
       if (typeof data.scan === 'string' && data.scan) {
         const overlay = document.createElement('div');
+        overlay.id = "scanWarningOverlay";
         overlay.style.position = 'fixed';
         overlay.style.top = '0';
         overlay.style.left = '0';
@@ -213,7 +179,7 @@ async function fetchTicketDetails() {
           <div style="background:white;padding:2em 3em;border-radius:1em;box-shadow:0 0 20px #900;text-align:center;max-width:90vw;">
             <h2 style="color:#b00;margin-bottom:1em;">Waarschuwing</h2>
             <div style="font-size:1.3em;color:#b00;font-weight:bold;">${data.scan}</div>
-            <button style="margin-top:2em;padding:0.5em 2em;font-size:1em;border:none;border-radius:0.5em;background:#b00;color:white;cursor:pointer;" onclick="this.parentElement.parentElement.remove()">Sluiten</button>
+            <button type="button" data-action="close-warning" style="margin-top:2em;padding:0.5em 2em;font-size:1em;border:none;border-radius:0.5em;background:#b00;color:white;cursor:pointer;">Sluiten</button>
           </div>
         `;
         document.body.appendChild(overlay);
@@ -267,18 +233,16 @@ async function fetchTicketDetails() {
 			<div><b>Status:</b> ${data.status || ""}</div>
 			${ticketTypesTable}
 			${vehicleInfo}
-			<div id="presenceOverlay" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.3); z-index:1000; align-items:center; justify-content:center;">
-				<div id="presenceOverlayContent" class="bg-white rounded-xl shadow-lg p-6 max-w-sm mx-auto mt-40 relative">
-					<button onclick="hidePresenceOverlay()" style="position:absolute; top:10px; right:10px; font-size:18px;">&times;</button>
-					<div id="presenceOverlayBody"></div>
-				</div>
-			</div>
 		`;
-    // Expose ticket data for overlay
-    window._ticketData = data;
   } catch (err) {
     document.getElementById("ticketDetails").innerHTML =
       '<div class="text-red-500">Failed to load ticket details.</div>';
   }
 }
+document.addEventListener("click", (event) => {
+  if (event.target.closest('[data-action="close-warning"]')) {
+    hideWarningOverlay();
+  }
+});
+
 fetchTicketDetails();
