@@ -1,394 +1,70 @@
-// Always go to index.html and reload
-document.addEventListener("DOMContentLoaded", () => {
-  const btn = document.getElementById("backToEventsBtn");
-  if (btn) {
-    btn.onclick = (e) => {
-      e.preventDefault();
-      window.location = "index.html";
-    };
-  }
-  const collectBtn = document.getElementById("collectTicketsBtn");
-  if (collectBtn) {
-    collectBtn.onclick = collectAllTickets;
-  }
-  // Register toggle button event
-  const toggleBtn = document.getElementById("toggleApprovedBtn");
-  if (toggleBtn) {
-    toggleBtn.onclick = () => {
-      showOnlyApproved = !showOnlyApproved;
-      toggleBtn.textContent = showOnlyApproved
-        ? "Toon alles"
-        : "Toon alleen goedgekeurd";
-      renderTable();
-    };
-  }
-});
-
-// Visual confirmation for force sync
-function showForceSyncMsg() {
-  const msg = document.getElementById("forceSyncMsg");
-  msg.classList.remove("hidden");
-  setTimeout(() => msg.classList.add("hidden"), 2000);
-}
-
-// Confirm before force sync
-async function confirmAndForceSync() {
-  const proceed = confirm(
-    "Weet je zeker dat je wilt force syncen? Dit haalt namelijk alle aanmeldingen opnieuw op van de backend.",
-  );
-  if (!proceed) return false;
-  return true;
-}
-
-// Hidden force sync: Ctrl+Shift+R (desktop)
-document.addEventListener("keydown", async (e) => {
-  if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "r") {
-    if (eventId && (await confirmAndForceSync())) {
-      try {
-        const resp = await fetch(`/participations/${eventId}/refresh`);
-        const data = await resp.json();
-        if (data.status === "accepted") {
-          showForceSyncMsg();
-        }
-      } catch {}
-      fetchParticipations(eventId);
-    }
-  }
-});
-
-// Hidden force sync: long-press on Sync Data button (mobile)
-let forceSyncTimeout;
-const syncBtn = document.getElementById("syncBtn");
-if (syncBtn) {
-  syncBtn.addEventListener("touchstart", () => {
-    forceSyncTimeout = setTimeout(async () => {
-      if (eventId && (await confirmAndForceSync())) {
-        try {
-          const resp = await fetch(`/participations/${eventId}/refresh`);
-          const data = await resp.json();
-          if (data.status === "accepted") {
-            showForceSyncMsg();
-          }
-        } catch {}
-        fetchParticipations(eventId);
-      }
-    }, 2000); // 2 seconds long-press
-  });
-  syncBtn.addEventListener("touchend", () => {
-    clearTimeout(forceSyncTimeout);
-  });
-}
-
-// Render lucide icons after DOM update
-document.addEventListener("DOMContentLoaded", () => {
-  if (window.lucide) lucide.createIcons();
-});
-function rerenderIcons() {
-  if (window.lucide) lucide.createIcons();
-}
-
-function refreshParticipations() {
-  if (eventId) fetchParticipations(eventId);
-  rerenderIcons();
-}
-
-async function fetchParticipations(eventId) {
-  console.log("Fetching participations for event:", eventId);
-  document.getElementById("loading").style.display = "";
-  try {
-    console.log("Starting fetch request...");
-    const response = await fetch(`/participations/${eventId}`);
-    console.log("Fetch response status:", response.status);
-    if (!response.ok)
-      throw new Error("Network response was not ok: " + response.statusText);
-    const data = await response.json();
-    // Also fetch APK status
-    await fetchApkStatus(eventId);
-    console.log("Data received, rendering table...");
-    renderTable(data);
-  } catch (err) {
-    console.error("Fetch error:", err);
-    document.getElementById("participationsTable").innerHTML =
-      '<div class="text-red-500">Failed to load participations: ' +
-      err.message +
-      "</div>";
-  } finally {
-    document.getElementById("loading").style.display = "none";
-  }
-}
+const params = new URLSearchParams(window.location.search);
+const eventId = params.get("event_id");
 
 const currentSort = { key: null, asc: true };
-// Track toggle for approved-only view
-let showOnlyApproved = true;
-// Track hidden state of each section
 const sectionVisibility = {};
-let participationsData = [];
-let participationsRawData = [];
+let showOnlyApproved = true;
 let hidePresent = false;
+let participationsRawData = [];
+let apkStatusData = {};
+let forceSyncTimeout;
 
-function renderTable(participations) {
-  // Only update raw data if new data is passed (from fetch)
-  if (participations) {
-    participationsRawData = participations.slice();
+function initIcons() {
+  if (window.lucide) {
+    lucide.createIcons();
   }
-  // Always filter from raw data
-  participationsData = participationsRawData.slice();
-  if (!participationsData.length) {
-    document.getElementById("participationsTable").innerHTML =
-      '<div class="text-slate-400">No participations found for this event.</div>';
-    return;
-  }
-  // Sort by current sort state, or by addressee ascending by default
+}
+
+function showForceSyncMsg(message = "Force sync voltooid!") {
+  const msg = document.getElementById("forceSyncMsg");
+  if (!msg) return;
+  msg.textContent = message;
+  msg.classList.remove("hidden");
+  setTimeout(() => {
+    msg.classList.add("hidden");
+    msg.textContent = "Force sync voltooid!";
+  }, 3000);
+}
+
+async function confirmAndForceSync() {
+  return confirm(
+    "Weet je zeker dat je wilt force syncen? Dit haalt namelijk alle aanmeldingen opnieuw op van de backend.",
+  );
+}
+
+function sortData(data) {
   const sortKey = currentSort.key || "addressee";
   const sortAsc = currentSort.key ? currentSort.asc : true;
-  participationsData.sort((a, b) => {
-    const aVal = (a[sortKey] || "").toLowerCase();
-    const bVal = (b[sortKey] || "").toLowerCase();
+
+  return [...data].sort((a, b) => {
+    const aVal = String(a[sortKey] || "").toLowerCase();
+    const bVal = String(b[sortKey] || "").toLowerCase();
     if (aVal < bVal) return sortAsc ? -1 : 1;
     if (aVal > bVal) return sortAsc ? 1 : -1;
     return 0;
   });
-  let filteredData = showOnlyApproved
-    ? participationsData.filter((p) => p.status === "approved")
-    : participationsData;
+}
+
+function getFilteredData() {
+  let filtered = sortData(participationsRawData);
+
+  if (showOnlyApproved) {
+    filtered = filtered.filter((participation) => participation.status === "approved");
+  }
+
   if (hidePresent) {
-    filteredData = filteredData.filter(
-      (p) => !p.presence_count || p.presence_count === 0,
+    filtered = filtered.filter(
+      (participation) =>
+        !participation.presence_count || participation.presence_count === 0,
     );
   }
-  const members = filteredData.filter((p) => p.member_id);
-  const vrijrijders = filteredData.filter((p) => !p.member_id);
 
-  let html = "";
-  html += renderSubTable("Leden", members, showOnlyApproved);
-  html += '<div class="h-8"></div>';
-  html += renderSubTable("Vrijrijders", vrijrijders, showOnlyApproved);
-  document.getElementById("participationsTable").innerHTML = html;
-  rerenderIcons();
-}
-// Toggle for hiding present entries
-document.addEventListener("DOMContentLoaded", () => {
-  const hidePresentSwitch = document.getElementById("hidePresentSwitch");
-  if (hidePresentSwitch) {
-    hidePresentSwitch.addEventListener("change", (e) => {
-      hidePresent = e.target.checked;
-      renderTable();
-    });
-  }
-});
-
-function renderSubTable(title, rows) {
-  if (!rows.length) return "";
-  // Calculate stats
-  const total = rows.length;
-  const presentCount = rows.filter((p) => p.presence_count > 0).length;
-
-  const sectionId = "section_" + title.replace(/\s+/g, "").toLowerCase();
-  let html = `<div class="mb-4"><div class="flex items-center justify-between mt-6 mb-2">`;
-  html += `<h2 class="text-lg font-bold">${title} <span class="text-slate-500 font-normal text-sm">(${presentCount} / ${total})</span></h2>`;
-  html += `<button type="button" onclick="toggleTable('${sectionId}')" id="btn_${sectionId}" class="text-xs text-blue-600 underline ml-4">Verberg</button>`;
-  html += `</div>`;
-  // Set display style based on sectionVisibility
-  const displayStyle =
-    sectionVisibility[sectionId] === false ? "display:none;" : "";
-  html += `<div id="${sectionId}" style="${displayStyle}" class="overflow-x-auto"><table class="min-w-full bg-white rounded-xl shadow text-sm"><thead><tr>`;
-  // Add sort indicators
-  const arrow = (key) => {
-    if (currentSort.key === key) {
-      return currentSort.asc ? " &#8595;" : " &#8593;";
-    }
-    return "";
-  };
-  html += `<th class="px-2 py-2 text-left cursor-pointer select-none" onclick="sortTable('addressee')">Naam${arrow("addressee")}</th>`;
-  html += `<th class="px-2 py-2 text-left cursor-pointer select-none" onclick="sortTable('email')">Email${arrow("email")}</th>`;
-  html += `<th class="px-2 py-2 text-left cursor-pointer select-none" onclick="sortTable('kenteken')">Kenteken${arrow("kenteken")}</th>`;
-  // Status-kolom nooit tonen
-  html += `<th class="px-2 py-2 text-left">Aanw.</th>`;
-  html += "</tr></thead><tbody>";
-  for (const p of rows) {
-    if (p.status === "unsubscribed") continue;
-    const ticketId = p.id || p.ticket_id || p.member_id || "";
-    const present =
-      typeof p.presence_count !== "undefined" && p.presence_count !== null
-        ? p.presence_count
-        : "";
-    const bought = typeof p.tickets !== "undefined" ? p.tickets : "";
-    let presenceStr = "-";
-    if (bought === null || bought === undefined || bought === "") {
-      presenceStr = "-";
-    } else {
-      presenceStr = `${present} / ${bought}`;
-    }
-    const isApproved = p.status === "approved";
-    const trClass =
-      "border-t transition" +
-      (isApproved ? " cursor-pointer hover:bg-slate-100" : " bg-slate-50");
-    const trOnClick = isApproved
-      ? `onclick="window.location.href='ticket.html?event_id=${eventId}&ticket_id=${ticketId}'"`
-      : "";
-        // Determine style for member name if lid_valid is false
-        let nameCellStyle = "";
-        const nameTitle =
-          p.lid_valid === false && p.lid_invalid_reason
-            ? p.lid_invalid_reason.replace(/"/g, "&quot;")
-            : p.addressee || "";
-        if (p.lid_valid === false) {
-          nameCellStyle = "background-color: red; color: white; padding: 2px 6px; border-radius: 4px;";
-        }
-        html += `<tr class="${trClass}" ${trOnClick}>
-          <td class="px-2 py-2 truncate max-w-[120px]" title="${nameTitle}"${nameCellStyle ? ` style='${nameCellStyle}'` : ""}>${p.addressee || ""}</td>
-          <td class="px-2 py-2 truncate max-w-[120px]" title="${p.email}">${p.email || ""}</td>`;
-    // Add APK styling to kenteken cell
-    const apkData = apkStatusData[ticketId];
-    let apkBgColor = "";
-    let apkTextColor = "";
-
-    if (!p.kenteken) {
-      apkBgColor = "bg-gray-100"; // Geen kenteken ingevuld
-    } else if (apkData) {
-      // We have APK data
-      if (apkData.vervaldatum_apk) {
-        // We have a date - use green/red background
-        apkBgColor = getApkBackgroundColor(apkData.vervaldatum_apk);
-      } else if (apkData.merk || apkData.handelsbenaming) {
-        // We have vehicle info but NO date -> Yellow background
-        apkBgColor = "bg-yellow-100";
-      } else {
-        // We have an apkData entry but it's empty? Treat as no info.
-        apkTextColor = "text-red-600 font-bold";
-      }
-    } else {
-      // No APK data found (apkData is undefined/null) -> Default bg, Red text
-      apkTextColor = "text-red-600 font-bold";
-    }
-
-    html += `
-            <td class="px-2 py-2 truncate max-w-[120px] ${apkBgColor} ${apkTextColor}" title="${p.kenteken || ""}">${p.kenteken || ""}</td>`;
-    // Status-cel nooit tonen
-    html += `
-            <td class="px-2 py-2">${presenceStr}</td>
-        </tr>`;
-  }
-  html += "</tbody></table></div></div>";
-  return html;
+  return filtered;
 }
 
-window.toggleTable = (sectionId) => {
-  const section = document.getElementById(sectionId);
-  const btn = document.getElementById("btn_" + sectionId);
-  if (section.style.display === "none") {
-    section.style.display = "";
-    btn.textContent = "Verberg";
-    sectionVisibility[sectionId] = true;
-  } else {
-    section.style.display = "none";
-    btn.textContent = "Toon";
-    sectionVisibility[sectionId] = false;
-  }
-};
-
-window.sortTable = (key) => {
-  if (currentSort.key === key) {
-    currentSort.asc = !currentSort.asc;
-  } else {
-    currentSort.key = key;
-    currentSort.asc = true;
-  }
-  // Sort participationsData in place
-  participationsData.sort((a, b) => {
-    const aVal = (a[key] || "").toLowerCase();
-    const bVal = (b[key] || "").toLowerCase();
-    if (aVal < bVal) return currentSort.asc ? -1 : 1;
-    if (aVal > bVal) return currentSort.asc ? 1 : -1;
-    return 0;
-  });
-  // Save current visibility state
-  const ledenSection = document.getElementById("section_leden");
-  const vrijrijdersSection = document.getElementById("section_vrijrijders");
-  if (ledenSection)
-    sectionVisibility["section_leden"] = ledenSection.style.display !== "none";
-  if (vrijrijdersSection)
-    sectionVisibility["section_vrijrijders"] =
-      vrijrijdersSection.style.display !== "none";
-  // Re-render the table with the new order
-  // This will update both Members and Vrijrijders tables and the sort indicators
-  const members = participationsData.filter((p) => p.member_id);
-  const vrijrijders = participationsData.filter((p) => !p.member_id);
-  let html = "";
-  html += renderSubTable("Leden", members);
-  html += '<div class="h-8"></div>';
-  html += renderSubTable("Vrijrijders", vrijrijders);
-  document.getElementById("participationsTable").innerHTML = html;
-  rerenderIcons && rerenderIcons();
-};
-
-// Get event_id from query string
-const params = new URLSearchParams(window.location.search);
-const eventId = params.get("event_id");
-console.log("Parsed eventId:", eventId);
-if (eventId) {
-  fetchParticipations(eventId);
-  if (typeof fetchEventDetails === "function") fetchEventDetails(eventId);
-} else {
-  console.error("No event ID in URL params");
-  document.getElementById("loading").textContent = "No event ID provided.";
-}
-
-// Collect all tickets for this event
-async function collectAllTickets() {
-  if (!eventId) return;
-  const btn = document.getElementById("collectTicketsBtn");
-  btn.disabled = true;
-  btn.innerHTML =
-    '<span class="animate-spin mr-2"><i data-lucide="loader" class="w-4 h-4"></i></span> Collecting...';
-  try {
-    const response = await fetch(`/event/${eventId}/collect-tickets`);
-    const data = await response.json();
-    if (data.status === "accepted") {
-      // Show message that it's starting
-      const statusMsg = document.getElementById("forceSyncMsg");
-      statusMsg.textContent = "Collection started in background!";
-      statusMsg.classList.remove("hidden");
-      setTimeout(() => {
-        statusMsg.classList.add("hidden");
-        statusMsg.textContent = "Force sync complete!";
-      }, 3000);
-      // Show cached data immediately
-      fetchParticipations(eventId);
-    } else {
-      alert("Failed to start collection: " + (data.message || "Unknown error"));
-    }
-  } catch (err) {
-    alert("Error contacting backend.");
-  }
-  btn.disabled = false;
-  btn.innerHTML =
-    '<i data-lucide="ticket" class="w-4 h-4"></i> Collect All Tickets';
-  rerenderIcons();
-}
-
-// Fetch APK status data and merge with participations
-let apkStatusData = {};
-
-async function fetchApkStatus(eventId) {
-  try {
-    const response = await fetch(`/apk-status/${eventId}`);
-    const data = await response.json();
-    // Create a map of participation_id -> apk data
-    apkStatusData = {};
-    for (const item of data) {
-      apkStatusData[item.participation_id] = item;
-    }
-  } catch (err) {
-    console.error("Error fetching APK status:", err);
-  }
-}
-
-// Helper function to get background color class for APK status
 function getApkBackgroundColor(vervaldatum) {
-  if (!vervaldatum) return "bg-yellow-100"; // Light yellow if kenteken found but no APK data
+  if (!vervaldatum) return "bg-yellow-100";
 
-  // Parse date (format: YYYYMMDD)
   const year = vervaldatum.substring(0, 4);
   const month = vervaldatum.substring(4, 6);
   const day = vervaldatum.substring(6, 8);
@@ -396,10 +72,283 @@ function getApkBackgroundColor(vervaldatum) {
   const today = new Date();
   const daysDiff = Math.floor((apkDate - today) / (1000 * 60 * 60 * 24));
 
-  // Return background color based on days until expiration
-  if (daysDiff < 0) {
-    return "bg-red-100"; // Expired - light red
-  } else {
-    return "bg-green-100"; // Valid - light green
+  return daysDiff < 0 ? "bg-red-100" : "bg-green-100";
+}
+
+function renderSubTable(title, rows) {
+  if (!rows.length) return "";
+
+  const total = rows.length;
+  const presentCount = rows.filter((participation) => participation.presence_count > 0).length;
+  const sectionId = `section_${title.replace(/\s+/g, "").toLowerCase()}`;
+  const hidden = sectionVisibility[sectionId] === false;
+  const arrow = (key) => {
+    if (currentSort.key !== key) return "";
+    return currentSort.asc ? " &#8595;" : " &#8593;";
+  };
+
+  const bodyHtml = rows
+    .filter((participation) => participation.status !== "unsubscribed")
+    .map((participation) => {
+      const ticketId =
+        participation.id || participation.ticket_id || participation.member_id || "";
+      const present =
+        participation.presence_count !== undefined && participation.presence_count !== null
+          ? participation.presence_count
+          : "";
+      const bought = participation.tickets !== undefined ? participation.tickets : "";
+      const presenceStr =
+        bought === null || bought === undefined || bought === ""
+          ? "-"
+          : `${present} / ${bought}`;
+
+      const apkData = apkStatusData[ticketId];
+      let apkBgColor = "";
+      let apkTextColor = "";
+
+      if (!participation.kenteken) {
+        apkBgColor = "bg-gray-100";
+      } else if (apkData) {
+        if (apkData.vervaldatum_apk) {
+          apkBgColor = getApkBackgroundColor(apkData.vervaldatum_apk);
+        } else if (apkData.merk || apkData.handelsbenaming) {
+          apkBgColor = "bg-yellow-100";
+        } else {
+          apkTextColor = "text-red-600 font-bold";
+        }
+      } else {
+        apkTextColor = "text-red-600 font-bold";
+      }
+
+      const nameTitle =
+        participation.lid_valid === false && participation.lid_invalid_reason
+          ? participation.lid_invalid_reason.replace(/"/g, "&quot;")
+          : participation.addressee || "";
+      const nameStyle =
+        participation.lid_valid === false
+          ? "background-color: red; color: white; padding: 2px 6px; border-radius: 4px;"
+          : "";
+      const rowClasses = `border-t transition${
+        participation.status === "approved"
+          ? " cursor-pointer hover:bg-slate-100"
+          : " bg-slate-50"
+      }`;
+
+      return `
+        <tr
+          class="${rowClasses}"
+          ${
+            participation.status === "approved"
+              ? `data-action="open-ticket" data-ticket-id="${ticketId}"`
+              : ""
+          }
+        >
+          <td class="px-2 py-2 truncate max-w-[120px]" title="${nameTitle}"${
+            nameStyle ? ` style="${nameStyle}"` : ""
+          }>${participation.addressee || ""}</td>
+          <td class="px-2 py-2 truncate max-w-[120px]" title="${participation.email || ""}">${participation.email || ""}</td>
+          <td class="px-2 py-2 truncate max-w-[120px] ${apkBgColor} ${apkTextColor}" title="${participation.kenteken || ""}">${participation.kenteken || ""}</td>
+          <td class="px-2 py-2">${presenceStr}</td>
+        </tr>`;
+    })
+    .join("");
+
+  return `
+    <div class="mb-4">
+      <div class="flex items-center justify-between mt-6 mb-2">
+        <h2 class="text-lg font-bold">${title} <span class="text-slate-500 font-normal text-sm">(${presentCount} / ${total})</span></h2>
+        <button type="button" data-action="toggle-section" data-section-id="${sectionId}" id="btn_${sectionId}" class="text-xs text-blue-600 underline ml-4">${hidden ? "Toon" : "Verberg"}</button>
+      </div>
+      <div id="${sectionId}" style="${hidden ? "display:none;" : ""}" class="overflow-x-auto">
+        <table class="min-w-full bg-white rounded-xl shadow text-sm">
+          <thead>
+            <tr>
+              <th class="px-2 py-2 text-left cursor-pointer select-none" data-action="sort" data-sort-key="addressee">Naam${arrow("addressee")}</th>
+              <th class="px-2 py-2 text-left cursor-pointer select-none" data-action="sort" data-sort-key="email">Email${arrow("email")}</th>
+              <th class="px-2 py-2 text-left cursor-pointer select-none" data-action="sort" data-sort-key="kenteken">Kenteken${arrow("kenteken")}</th>
+              <th class="px-2 py-2 text-left">Aanw.</th>
+            </tr>
+          </thead>
+          <tbody>${bodyHtml}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function renderTable(participations = null) {
+  if (participations) {
+    participationsRawData = [...participations];
+  }
+
+  const table = document.getElementById("participationsTable");
+  const filtered = getFilteredData();
+  if (!filtered.length) {
+    table.innerHTML =
+      '<div class="text-slate-400">No participations found for this event.</div>';
+    return;
+  }
+
+  const members = filtered.filter((participation) => participation.member_id);
+  const vrijrijders = filtered.filter((participation) => !participation.member_id);
+  table.innerHTML = `${renderSubTable("Leden", members)}<div class="h-8"></div>${renderSubTable("Vrijrijders", vrijrijders)}`;
+}
+
+async function fetchApkStatus(currentEventId) {
+  try {
+    const response = await fetch(`/apk-status/${currentEventId}`);
+    if (!response.ok) {
+      throw new Error("APK status ophalen mislukt.");
+    }
+
+    const data = await response.json();
+    apkStatusData = {};
+    for (const item of data) {
+      apkStatusData[item.participation_id] = item;
+    }
+  } catch {
+    apkStatusData = {};
   }
 }
+
+async function fetchParticipations(currentEventId) {
+  document.getElementById("loading").style.display = "";
+  try {
+    const [participationsResponse] = await Promise.all([
+      fetch(`/participations/${currentEventId}`),
+      fetchApkStatus(currentEventId),
+    ]);
+
+    if (!participationsResponse.ok) {
+      throw new Error(`Network response was not ok: ${participationsResponse.statusText}`);
+    }
+
+    renderTable(await participationsResponse.json());
+  } catch (error) {
+    document.getElementById("participationsTable").innerHTML =
+      `<div class="text-red-500">Failed to load participations: ${error.message}</div>`;
+  } finally {
+    document.getElementById("loading").style.display = "none";
+  }
+}
+
+async function refreshParticipations() {
+  if (!eventId) return;
+  await fetchParticipations(eventId);
+}
+
+async function triggerForceSync() {
+  if (!eventId || !(await confirmAndForceSync())) return;
+
+  try {
+    const response = await fetch(`/participations/${eventId}/refresh`);
+    const data = await response.json();
+    if (data.status === "accepted") {
+      showForceSyncMsg();
+    }
+  } catch {}
+
+  await fetchParticipations(eventId);
+}
+
+async function collectAllTickets() {
+  if (!eventId) return;
+
+  const btn = document.getElementById("collectTicketsBtn");
+  const originalHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML =
+    '<span class="animate-spin mr-2"><i data-lucide="loader-2" class="w-4 h-4"></i></span> Collecting...';
+  initIcons();
+
+  try {
+    const response = await fetch(`/event/${eventId}/collect-tickets`);
+    const data = await response.json();
+    if (data.status === "accepted") {
+      showForceSyncMsg("Collection started in background!");
+      await fetchParticipations(eventId);
+    } else {
+      alert(`Failed to start collection: ${data.message || "Unknown error"}`);
+    }
+  } catch {
+    alert("Error contacting backend.");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalHtml;
+    initIcons();
+  }
+}
+
+function handleTableClick(event) {
+  const toggleButton = event.target.closest('[data-action="toggle-section"]');
+  if (toggleButton) {
+    const sectionId = toggleButton.dataset.sectionId;
+    const section = document.getElementById(sectionId);
+    const isHidden = section.style.display === "none";
+    section.style.display = isHidden ? "" : "none";
+    toggleButton.textContent = isHidden ? "Verberg" : "Toon";
+    sectionVisibility[sectionId] = isHidden;
+    return;
+  }
+
+  const sortHeader = event.target.closest('[data-action="sort"]');
+  if (sortHeader) {
+    const key = sortHeader.dataset.sortKey;
+    if (currentSort.key === key) {
+      currentSort.asc = !currentSort.asc;
+    } else {
+      currentSort.key = key;
+      currentSort.asc = true;
+    }
+    renderTable();
+    return;
+  }
+
+  const row = event.target.closest('[data-action="open-ticket"]');
+  if (row) {
+    window.location.href = `ticket.html?event_id=${eventId}&ticket_id=${row.dataset.ticketId}`;
+  }
+}
+
+document.addEventListener("keydown", async (event) => {
+  if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "r") {
+    await triggerForceSync();
+  }
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  initIcons();
+
+  document.getElementById("backToEventsBtn")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    window.location = "index.html";
+  });
+  document.getElementById("toggleApprovedBtn")?.addEventListener("click", () => {
+    showOnlyApproved = !showOnlyApproved;
+    document.getElementById("toggleApprovedBtn").textContent = showOnlyApproved
+      ? "Toon alles"
+      : "Toon alleen goedgekeurd";
+    renderTable();
+  });
+  document.getElementById("hidePresentSwitch")?.addEventListener("change", (event) => {
+    hidePresent = event.target.checked;
+    renderTable();
+  });
+  document.getElementById("syncBtn")?.addEventListener("click", refreshParticipations);
+  document.getElementById("syncBtn")?.addEventListener("touchstart", () => {
+    forceSyncTimeout = setTimeout(triggerForceSync, 2000);
+  });
+  document.getElementById("syncBtn")?.addEventListener("touchend", () => {
+    clearTimeout(forceSyncTimeout);
+  });
+  document.getElementById("collectTicketsBtn")?.addEventListener("click", collectAllTickets);
+  document.getElementById("participationsTable")?.addEventListener("click", handleTableClick);
+
+  if (eventId) {
+    fetchParticipations(eventId);
+    if (typeof fetchEventDetails === "function") {
+      fetchEventDetails(eventId);
+    }
+  } else {
+    document.getElementById("loading").textContent = "No event ID provided.";
+  }
+});

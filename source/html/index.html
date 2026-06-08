@@ -4,10 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ANVT Dashboard | Local Admin</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
     <script src="auth.js"></script>
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="app.css" />
   </head>
   <body class="bg-slate-50 min-h-screen pb-20">
     <div class="max-w-7xl mx-auto px-4 py-10">
@@ -37,7 +35,6 @@
           </a>
           <button
             id="syncBtn"
-            onclick="syncEvents()"
             class="flex items-center gap-2 bg-white border px-4 py-2 rounded-lg shadow-sm hover:bg-slate-50 transition"
           >
             <i data-lucide="refresh-cw" class="w-4 h-4"></i> Sync Data
@@ -72,7 +69,8 @@
           <div class="flex items-center justify-between mb-2">
             <h2 class="text-xl font-bold">Evenement van vandaag</h2>
             <button
-              onclick="toggleSection('today')"
+              data-action="toggle-section"
+              data-section="today"
               id="toggleToday"
               class="text-xs text-blue-600 underline"
             >
@@ -88,7 +86,8 @@
           <div class="flex items-center justify-between mb-2">
             <h2 class="text-xl font-bold">Komende evenementen</h2>
             <button
-              onclick="toggleSection('future')"
+              data-action="toggle-section"
+              data-section="future"
               id="toggleFuture"
               class="text-xs text-blue-600 underline"
             >
@@ -104,7 +103,8 @@
           <div class="flex items-center justify-between mb-2">
             <h2 class="text-xl font-bold">Oude evenementen</h2>
             <button
-              onclick="toggleSection('past')"
+              data-action="toggle-section"
+              data-section="past"
               id="togglePast"
               class="text-xs text-blue-600 underline"
             >
@@ -119,6 +119,8 @@
       </div>
     </div>
 
+    <script src="vendor/lucide.min.js"></script>
+    <script src="events_cache.js"></script>
     <script src="index.js"></script>
   </body>
 </html>

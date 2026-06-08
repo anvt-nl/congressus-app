@@ -1,4 +1,5 @@
 api-key*.txt
+node_modules
 *.json
 *.db
 *.png

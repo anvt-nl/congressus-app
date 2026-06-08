@@ -1,3 +1,9 @@
+function initIcons() {
+  if (window.lucide) {
+    lucide.createIcons();
+  }
+}
+
 function buildShareUrl(token) {
   const url = new URL("scan.html", window.location.href);
   url.searchParams.set("access_token", token);
@@ -47,9 +53,7 @@ function initializeTokenExpiryDateInput() {
   const tokenExpiryDateInput = document.getElementById("tokenExpiryDate");
   if (!tokenExpiryDateInput) return;
 
-  const today = new Date();
-  tokenExpiryDateInput.min = formatDateInputValue(today);
-
+  tokenExpiryDateInput.min = formatDateInputValue(new Date());
   if (!tokenExpiryDateInput.value) {
     tokenExpiryDateInput.value = formatDateInputValue(getDefaultTokenExpiryDate());
   }
@@ -80,47 +84,57 @@ function getCurrentTokenFromUrlField() {
     return null;
   }
 }
+
+function renderTokenList(tokens) {
+  const tokenList = document.getElementById("tokenList");
+  tokenList.innerHTML = "";
+
+  if (!Array.isArray(tokens) || tokens.length === 0) {
+    tokenList.innerHTML =
+      '<div class="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">Er zijn geen actieve tokens.</div>';
+    return;
+  }
+
+  for (const token of tokens) {
+    const card = document.createElement("div");
+    card.dataset.action = "select-token";
+    card.dataset.token = token.token;
+    card.dataset.expiresAt = token.expires_at;
+    card.className =
+      "flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition";
+    card.innerHTML = `
+      <div class="min-w-0">
+        <div class="font-mono text-sm text-slate-800" title="${token.token}">${shortenToken(token.token)}</div>
+        <div class="text-xs text-slate-500 mt-1">Aangemaakt: ${token.created_at}</div>
+        <div class="text-xs text-slate-500">Geldig tot: ${token.expires_at}</div>
+      </div>
+      <button
+        type="button"
+        data-action="revoke-token"
+        data-token="${token.token}"
+        class="flex items-center gap-2 bg-red-50 text-red-600 px-3 py-2 rounded-lg font-semibold hover:bg-red-100 transition text-sm"
+      >
+        <i data-lucide="ban" class="w-4 h-4"></i> Revoke
+      </button>`;
+    tokenList.appendChild(card);
+  }
+}
+
 async function loadActiveTokens() {
   const tokenList = document.getElementById("tokenList");
   if (!tokenList) return;
 
   tokenList.innerHTML =
     '<div class="text-slate-400 text-sm flex items-center gap-2"><i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Tokens laden...</div>';
-  lucide.createIcons();
+  initIcons();
 
   try {
     const response = await fetch("/admin/access-tokens");
     if (!response.ok) throw new Error("Tokens laden mislukt.");
 
-    const tokens = await response.json();
-    if (!Array.isArray(tokens) || tokens.length === 0) {
-      tokenList.innerHTML =
-        '<div class="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">Er zijn geen actieve tokens.</div>';
-      return;
-    }
-
-    tokenList.innerHTML = tokens
-      .map(
-        (token) => `
-          <div onclick="selectToken('${token.token}', '${token.expires_at}')" class="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition">
-            <div class="min-w-0">
-              <div class="font-mono text-sm text-slate-800" title="${token.token}">${shortenToken(token.token)}</div>
-              <div class="text-xs text-slate-500 mt-1">Aangemaakt: ${token.created_at}</div>
-              <div class="text-xs text-slate-500">Geldig tot: ${token.expires_at}</div>
-            </div>
-            <button
-              onclick="event.stopPropagation(); revokeToken('${token.token}')"
-              class="flex items-center gap-2 bg-red-50 text-red-600 px-3 py-2 rounded-lg font-semibold hover:bg-red-100 transition text-sm"
-            >
-              <i data-lucide="ban" class="w-4 h-4"></i> Revoke
-            </button>
-          </div>
-        `,
-      )
-      .join("");
-    lucide.createIcons();
-  } catch (error) {
-    console.error("Error loading active tokens:", error);
+    renderTokenList(await response.json());
+    initIcons();
+  } catch {
     tokenList.innerHTML =
       '<div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">Fout bij het laden van tokens.</div>';
   }
@@ -132,12 +146,9 @@ async function revokeToken(token) {
   }
 
   try {
-    const response = await fetch(
-      `/admin/access-token/${encodeURIComponent(token)}`,
-      {
-        method: "DELETE",
-      },
-    );
+    const response = await fetch(`/admin/access-token/${encodeURIComponent(token)}`, {
+      method: "DELETE",
+    });
     const result = await response.json();
 
     if (!response.ok || result.status !== "success") {
@@ -147,7 +158,6 @@ async function revokeToken(token) {
     setTokenStatus("Token ingetrokken.");
     await loadActiveTokens();
   } catch (error) {
-    console.error("Error revoking token:", error);
     setTokenStatus(error.message, true);
   }
 }
@@ -170,7 +180,7 @@ async function generateToken() {
   generateBtn.innerHTML =
     '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Genereren...';
   setTokenStatus("");
-  lucide.createIcons();
+  initIcons();
 
   try {
     const response = await fetch("/admin/access-token", {
@@ -190,13 +200,12 @@ async function generateToken() {
     setTokenStatus("Toegangslink gegenereerd.");
     await loadActiveTokens();
   } catch (error) {
-    console.error("Error generating token:", error);
     setTokenStatus(error.message, true);
   } finally {
     generateBtn.disabled = false;
     generateBtn.classList.remove("opacity-60", "cursor-not-allowed");
     generateBtn.innerHTML = originalHtml;
-    lucide.createIcons();
+    initIcons();
   }
 }
 
@@ -213,16 +222,14 @@ async function copyTokenUrl() {
   try {
     await navigator.clipboard.writeText(tokenUrlInput.value);
     const originalHtml = copyBtn.innerHTML;
-    copyBtn.innerHTML =
-      '<i data-lucide="check" class="w-4 h-4"></i> Gekopieerd';
+    copyBtn.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i> Gekopieerd';
     setTokenStatus("URL gekopieerd naar klembord.");
-    lucide.createIcons();
+    initIcons();
     setTimeout(() => {
       copyBtn.innerHTML = originalHtml;
-      lucide.createIcons();
+      initIcons();
     }, 2000);
-  } catch (error) {
-    console.error("Error copying token URL:", error);
+  } catch {
     setTokenStatus("Kopieren naar klembord mislukt.", true);
   }
 }
@@ -236,39 +243,44 @@ function openHomepageWithToken() {
 
   window.location.href = buildHomeUrl(token);
 }
+
+function renderTables(tables) {
+  const tableList = document.getElementById("tableList");
+  tableList.innerHTML = "";
+
+  for (const table of tables) {
+    const row = document.createElement("div");
+    row.className =
+      "flex items-center justify-between p-4 bg-white rounded-xl border shadow-sm hover:shadow-md transition";
+    row.innerHTML = `
+      <div>
+        <h3 class="font-bold text-slate-900 capitalize">${table}</h3>
+        <p class="text-xs text-slate-500">Volledige tabel leegmaken</p>
+      </div>
+      <button
+        type="button"
+        data-action="clear-table"
+        data-table="${table}"
+        class="bg-red-50 text-red-600 px-4 py-2 rounded-lg font-semibold hover:bg-red-100 transition flex items-center gap-2"
+      >
+        <i data-lucide="trash-2" class="w-4 h-4"></i> Leegmaken
+      </button>`;
+    tableList.appendChild(row);
+  }
+}
+
 async function loadTables() {
   const tableList = document.getElementById("tableList");
   tableList.innerHTML =
     '<div class="animate-spin"><i data-lucide="loader-2" class="w-6 h-6"></i></div>';
+  initIcons();
 
   try {
     const response = await fetch("/admin/tables");
-    const tables = await response.json();
-
-    tableList.innerHTML = "";
-    tables.forEach((table) => {
-      const row = document.createElement("div");
-      row.className =
-        "flex items-center justify-between p-4 bg-white rounded-xl border shadow-sm hover:shadow-md transition";
-      row.innerHTML = `
-                <div>
-                    <h3 class="font-bold text-slate-900 capitalize">${table}</h3>
-                    <p class="text-xs text-slate-500">Volledige tabel leegmaken</p>
-                </div>
-                <button 
-                    onclick="clearTable('${table}')"
-                    class="bg-red-50 text-red-600 px-4 py-2 rounded-lg font-semibold hover:bg-red-100 transition flex items-center gap-2"
-                >
-                    <i data-lucide="trash-2" class="w-4 h-4"></i> Leegmaken
-                </button>
-            `;
-      tableList.appendChild(row);
-    });
-    lucide.createIcons();
-  } catch (error) {
-    console.error("Error loading tables:", error);
-    tableList.innerHTML =
-      '<p class="text-red-500">Fout bij het laden van tabellen.</p>';
+    renderTables(await response.json());
+    initIcons();
+  } catch {
+    tableList.innerHTML = '<p class="text-red-500">Fout bij het laden van tabellen.</p>';
   }
 }
 
@@ -286,39 +298,45 @@ async function clearTable(tableName) {
       method: "POST",
     });
     const result = await response.json();
-
-    if (result.status === "success") {
-      alert(`Tabel ${tableName} is succesvol geleegd.`);
-    } else {
-      alert(`Fout: ${result.message}`);
-    }
-  } catch (error) {
-    console.error("Error clearing table:", error);
+    alert(
+      result.status === "success"
+        ? `Tabel ${tableName} is succesvol geleegd.`
+        : `Fout: ${result.message}`,
+    );
+  } catch {
     alert("Er is een fout opgetreden bij het leegmaken van de tabel.");
   }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  initIcons();
   initializeTokenExpiryDateInput();
 
-  const generateTokenBtn = document.getElementById("generateTokenBtn");
-  if (generateTokenBtn) {
-    generateTokenBtn.addEventListener("click", generateToken);
-  }
+  document.getElementById("generateTokenBtn")?.addEventListener("click", generateToken);
+  document.getElementById("copyTokenBtn")?.addEventListener("click", copyTokenUrl);
+  document.getElementById("openHomeBtn")?.addEventListener("click", openHomepageWithToken);
+  document.getElementById("refreshTokensBtn")?.addEventListener("click", loadActiveTokens);
 
-  const copyTokenBtn = document.getElementById("copyTokenBtn");
-  if (copyTokenBtn) {
-    copyTokenBtn.addEventListener("click", copyTokenUrl);
-  }
+  document.getElementById("tokenList")?.addEventListener("click", (event) => {
+    const revokeButton = event.target.closest('[data-action="revoke-token"]');
+    if (revokeButton) {
+      event.stopPropagation();
+      revokeToken(revokeButton.dataset.token);
+      return;
+    }
 
-  const openHomeBtn = document.getElementById("openHomeBtn");
-  if (openHomeBtn) {
-    openHomeBtn.addEventListener("click", openHomepageWithToken);
-  }
-  const refreshTokensBtn = document.getElementById("refreshTokensBtn");
-  if (refreshTokensBtn) {
-    refreshTokensBtn.addEventListener("click", loadActiveTokens);
-  }
+    const tokenCard = event.target.closest('[data-action="select-token"]');
+    if (tokenCard) {
+      selectToken(tokenCard.dataset.token, tokenCard.dataset.expiresAt);
+    }
+  });
+
+  document.getElementById("tableList")?.addEventListener("click", (event) => {
+    const button = event.target.closest('[data-action="clear-table"]');
+    if (button) {
+      clearTable(button.dataset.table);
+    }
+  });
 
   loadActiveTokens();
   loadTables();

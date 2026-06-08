@@ -1,4 +1,10 @@
-lucide.createIcons();
+function initIcons() {
+  if (window.lucide) {
+    lucide.createIcons();
+  }
+}
+
+initIcons();
 
 let html5QrCode;
 let isScanning = false;
@@ -54,9 +60,7 @@ function playBeepSound() {
     gainNode.connect(context.destination);
     oscillator.start(startTime);
     oscillator.stop(startTime + 0.16);
-  } catch (error) {
-    console.error("Audio playback failed", error);
-  }
+  } catch {}
 }
 
 // Start scanning
@@ -74,10 +78,10 @@ copyBtn.addEventListener("click", () => {
     .then(() => {
       const originalText = copyBtn.innerHTML;
       copyBtn.innerHTML = '<i data-lucide="check" class="w-5 h-5"></i> Copied!';
-      lucide.createIcons();
+      initIcons();
       setTimeout(() => {
         copyBtn.innerHTML = originalText;
-        lucide.createIcons();
+        initIcons();
       }, 2000);
     })
     .catch((err) => {
@@ -97,13 +101,10 @@ async function goToClosestEvent() {
   closestEventBtn.classList.add("opacity-60", "cursor-not-allowed");
   closestEventBtn.innerHTML =
     '<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i> Laden...';
-  lucide.createIcons();
+  initIcons();
 
   try {
-    const response = await fetch("/events");
-    if (!response.ok) throw new Error("Evenementen konden niet worden geladen.");
-
-    const events = await response.json();
+    const events = await window.AnvtEventsCache.fetchEventsCached();
     if (!Array.isArray(events) || events.length === 0) {
       throw new Error("Geen evenementen gevonden.");
     }
@@ -176,7 +177,7 @@ async function goToClosestEvent() {
     closestEventBtn.disabled = false;
     closestEventBtn.classList.remove("opacity-60", "cursor-not-allowed");
     closestEventBtn.innerHTML = originalHtml;
-    lucide.createIcons();
+    initIcons();
   }
 }
 
@@ -217,7 +218,6 @@ function startScanning() {
     )
     .then(() => {
       isScanning = true;
-      console.log("Scanner started successfully");
     })
     .catch((err) => {
       showError(`Unable to start scanner: ${err}`);
@@ -231,11 +231,9 @@ function stopScanning() {
       .stop()
       .then(() => {
         isScanning = false;
-        console.log("Scanner stopped");
         resetUI();
       })
-      .catch((err) => {
-        console.error("Error stopping scanner:", err);
+      .catch(() => {
         resetUI();
       });
   } else {
@@ -243,8 +241,7 @@ function stopScanning() {
   }
 }
 
-function onScanSuccess(decodedText, decodedResult) {
-  console.log(`Scan successful: ${decodedText}`, decodedResult);
+function onScanSuccess(decodedText, _decodedResult) {
   playBeepSound();
 
   // Stop scanning
@@ -253,7 +250,7 @@ function onScanSuccess(decodedText, decodedResult) {
   // Show loading indicator
   isProcessing = true;
   loadingContainer.classList.remove("hidden");
-  lucide.createIcons();
+  initIcons();
 
   try {
     const data = JSON.parse(decodedText);
@@ -269,7 +266,7 @@ function onScanSuccess(decodedText, decodedResult) {
       .then((response) => {
         if (!response.ok) {
           if (response.status === 404) {
-            throw new Error("Ticket niet gevonden in database.");
+            throw new Error("Ticket not found in database.");
           }
           throw new Error(`Server error: ${response.status}`);
         }
@@ -314,9 +311,8 @@ function onScanSuccess(decodedText, decodedResult) {
   }
 }
 
-function onScanError(errorMessage) {
+function onScanError(_errorMessage) {
   // This is called frequently during scanning, so we don't show it as an error
-  // console.log(`Scan error: ${errorMessage}`);
 }
 
 function showError(message) {
@@ -325,7 +321,7 @@ function showError(message) {
   loadingContainer.classList.add("hidden");
   errorMessage.textContent = message;
   errorContainer.classList.remove("hidden");
-  lucide.createIcons();
+  initIcons();
 }
 
 function resetUI() {
@@ -336,7 +332,12 @@ function resetUI() {
   if (isProcessing) {
     startScanBtn.disabled = true;
     startScanBtn.classList.add("opacity-50", "cursor-not-allowed");
-    startScanBtn.classList.remove("hover:shadow-xl", "hover:from-yellow-500", "hover:to-yellow-600", "hover:scale-105");
+    startScanBtn.classList.remove(
+      "hover:shadow-xl",
+      "hover:from-yellow-500",
+      "hover:to-yellow-600",
+      "hover:scale-105",
+    );
     startScanBtn.innerHTML = '<i data-lucide="loader-2" class="w-6 h-6 animate-spin"></i> Bezig...';
   } else {
     startScanBtn.disabled = false;
@@ -344,5 +345,5 @@ function resetUI() {
     startScanBtn.classList.add("hover:shadow-xl", "hover:from-yellow-500", "hover:to-yellow-600", "hover:scale-105");
     startScanBtn.innerHTML = '<i data-lucide="scan" class="w-6 h-6"></i> Start Scannen';
   }
-  lucide.createIcons();
+  initIcons();
 }
