@@ -10,11 +10,17 @@
   <body class="bg-slate-50 min-h-screen pb-20">
     <div class="max-w-4xl mx-auto px-4 py-10">
       <!-- Navigation links -->
-      <div class="mb-4 flex gap-4">
-        <button id="backToEventsBtn" class="text-blue-600 underline">
+      <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:gap-4">
+        <button
+          id="backToEventsBtn"
+          class="text-left text-blue-600 underline sm:text-center"
+        >
           &larr; Terug naar evenementen
         </button>
-        <button id="toggleApprovedBtn" class="text-blue-600 underline">
+        <button
+          id="toggleApprovedBtn"
+          class="text-left text-blue-600 underline sm:text-center"
+        >
           Toon alles
         </button>
       </div>
@@ -32,7 +38,7 @@
       </div>
 
       <!-- Controls row: checkboxes left, buttons right -->
-      <div class="flex items-center justify-between mb-6">
+      <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div class="flex items-center gap-4">
           <label class="flex items-center gap-2 text-sm">
             <input
@@ -43,22 +49,22 @@
             Verberg aanwezigen
           </label>
         </div>
-        <div class="flex gap-2 items-center">
+        <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
           <a
             href="scan.html"
-            class="flex items-center gap-2 bg-yellow-400 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-yellow-500 transition"
+            class="flex w-full items-center justify-center gap-2 rounded-lg bg-yellow-400 px-4 py-2 text-white shadow-sm transition hover:bg-yellow-500 sm:w-auto"
           >
             <i data-lucide="scan" class="w-4 h-4"></i> Scan Tickets
           </a>
           <button
             id="syncBtn"
-            class="flex items-center gap-2 bg-white border px-4 py-2 rounded-lg shadow-sm hover:bg-slate-50 transition"
+            class="flex w-full items-center justify-center gap-2 rounded-lg border bg-white px-4 py-2 shadow-sm transition hover:bg-slate-50 sm:w-auto"
           >
             <i data-lucide="refresh-cw" class="w-4 h-4"></i> Sync Data
           </button>
           <button
             id="collectTicketsBtn"
-            class="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-blue-700 transition"
+            class="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white shadow-sm transition hover:bg-blue-700 sm:w-auto"
           >
             <i data-lucide="ticket" class="w-4 h-4"></i> Collect Tickets
           </button>

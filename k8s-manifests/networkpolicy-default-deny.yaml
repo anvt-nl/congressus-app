@@ -12,7 +12,25 @@ spec:
   - ports:
     - protocol: TCP
       port: 8000
+    - protocol: TCP
+      port: 4180
+  # Allow internal traffic from oauth2-proxy to congressus-app
+  - from:
+    - podSelector:
+        matchLabels:
+          app: oauth2-proxy
+    ports:
+    - protocol: TCP
+      port: 8000
   egress:
+  # Allow internal traffic from oauth2-proxy to congressus-app
+  - to:
+    - podSelector:
+        matchLabels:
+          app: congressus-app
+    ports:
+    - protocol: TCP
+      port: 8000
   # Allow DNS (UDP/TCP 53) to kube-system kube-dns or external
   - to:
     - namespaceSelector:
