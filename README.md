@@ -92,12 +92,12 @@ Commit de gegenereerde bestanden mee met je wijziging.
    export APK_CHECK_MAX_WORKERS=4
    ```
 
-   | Variabele                   | Standaard                    | Betekenis                                              |
-   |------------------------------|-------------------------------|---------------------------------------------------------|
-   | `CONGRESSUS_CACHE_DB`         | `/db/congressus_cache.db`     | Pad naar de lokale SQLite-cache                          |
-   | `MAX_SCAN_DAYS`                | `7`                            | Max. aantal dagen dat scannen voor een evenement toegestaan is |
-   | `STALE_EVENT_REFRESH_DAYS`     | `2`                            | Na hoeveel dagen een evenement als verouderd wordt beschouwd en automatisch ververst |
-   | `APK_CHECK_MAX_WORKERS`        | `4`                            | Max. aantal parallelle workers voor APK-status-opvraging bij de RDW |
+   | Variabele                  | Standaard                 | Betekenis                                                                            |
+   | -------------------------- | ------------------------- | ------------------------------------------------------------------------------------ |
+   | `CONGRESSUS_CACHE_DB`      | `/db/congressus_cache.db` | Pad naar de lokale SQLite-cache                                                      |
+   | `MAX_SCAN_DAYS`            | `7`                       | Max. aantal dagen dat scannen voor een evenement toegestaan is                       |
+   | `STALE_EVENT_REFRESH_DAYS` | `2`                       | Na hoeveel dagen een evenement als verouderd wordt beschouwd en automatisch ververst |
+   | `APK_CHECK_MAX_WORKERS`    | `4`                       | Max. aantal parallelle workers voor APK-status-opvraging bij de RDW                  |
 
 4. **Start de backend**
 
@@ -121,11 +121,11 @@ Commit de gegenereerde bestanden mee met je wijziging.
 applicatie (op infrastructuurniveau) beveiligd, en dat verschilt per
 omgeving:
 
-| Omgeving                     | Beveiliging van `admin.html`                                                        |
-|-------------------------------|----------------------------------------------------------------------------------------|
-| Test (`anvt-dev.gemert.net`)  | **Basic authentication** (gebruikersnaam/wachtwoord), ingesteld op de server/ingress, niet in deze repo. |
-| Productie (`scan.anvt.nl`)    | **Google OAuth via `oauth2-proxy`** (zie `k8s-manifests/oauth2-proxy-deployment.yaml`), beperkt tot het `anvt.nl`-e-maildomein. |
-| Lokaal (`uvicorn --reload`)   | **Geen** authenticatie — `admin.html` is direct en zonder login bereikbaar.            |
+| Omgeving                     | Beveiliging van `admin.html`                                                                                                    |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Test (`anvt-dev.gemert.net`) | **Basic authentication** (gebruikersnaam/wachtwoord), ingesteld op de server/ingress, niet in deze repo.                        |
+| Productie (`scan.anvt.nl`)   | **Google OAuth via `oauth2-proxy`** (zie `k8s-manifests/oauth2-proxy-deployment.yaml`), beperkt tot het `anvt.nl`-e-maildomein. |
+| Lokaal (`uvicorn --reload`)  | **Geen** authenticatie — `admin.html` is direct en zonder login bereikbaar.                                                     |
 
 Zonder geldige inloggegevens (test) of een geautoriseerd Google-account
 (productie) krijg je geen toegang tot de adminpagina, ook niet als je de URL

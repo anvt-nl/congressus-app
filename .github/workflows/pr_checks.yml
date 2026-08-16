@@ -54,6 +54,10 @@ jobs:
           VALIDATE_PYTHON_FLAKE8: true
           VALIDATE_BASH: true
           VALIDATE_GITIGNORE: true
+          # Skip generated/vendor assets: these are build output or third-party
+          # minified bundles, not hand-written source, so linting them is not
+          # meaningful and only produces noise.
+          FILTER_REGEX_EXCLUDE: (^|/)source/html/app\.css$|(^|/)source/html/vendor/.*
           FIX_HTML_PRETTIER: true
           FIX_MARKDOWN_PRETTIER: true
           FIX_YAML_PRETTIER: true
