@@ -338,4 +338,25 @@ Verlopen tokens worden automatisch opgeschoond.
   [Authenticatie op admin.html per omgeving](#authenticatie-op-adminhtml-per-omgeving);
 - deploy-manifests: `k8s-manifests/` (productie) en `k8s-manifests/dev/` (test);
   ingress/routing voor beide omgevingen wordt buiten deze repo op de server
-  beheerd.
+  beheerd;
+- draai `./scripts/run-ci-checks.sh` (vereist Docker) om lokaal dezelfde
+  linting- en build-checks als de `PR Checks`-workflow uit te voeren
+  vóórdat je een PR opent — zie [Lokaal CI-checks draaien](#lokaal-ci-checks-draaien).
+
+## Lokaal CI-checks draaien
+
+Om te voorkomen dat een PR onnodig faalt op checks die je ook lokaal kunt
+draaien, bevat `scripts/run-ci-checks.sh` een lokale spiegel van de
+belangrijkste jobs uit `.github/workflows/pr_checks.yml` (Hadolint,
+Super-linter met dezelfde configuratie, de Docker-build, Dockle en de
+integratietest). Vereist alleen Docker:
+
+```bash
+./scripts/run-ci-checks.sh         # alle checks
+./scripts/run-ci-checks.sh lint    # alleen Hadolint + Super-linter
+./scripts/run-ci-checks.sh build   # alleen Docker build + Dockle + integratietest
+```
+
+De ClamAV-scan en de `pr_summary`-job worden bewust niet lokaal gedraaid
+(ClamAV vereist een systeemdaemon/database-update; `pr_summary` post enkel
+een PR-comment).
