@@ -44,9 +44,12 @@ jobs:
           VALIDATE_ALL_CODEBASE: true
           # Languages actually present in this repo.
           VALIDATE_YAML: true
+          VALIDATE_YAML_PRETTIER: true
           VALIDATE_MARKDOWN: true
+          VALIDATE_MARKDOWN_PRETTIER: true
           VALIDATE_JAVASCRIPT_ES: true
           VALIDATE_HTML: true
+          VALIDATE_HTML_PRETTIER: true
           VALIDATE_CSS: true
           VALIDATE_PYTHON_FLAKE8: true
           VALIDATE_BASH: true
