@@ -31,6 +31,8 @@ source/
     auth.js                Tokenvalidatie voor afgeschermde pagina's
     index.html             Homepage voor gebruikers met token
     index.js
+    event_heading.js
+    events_cache.js
     participations_overview.html
     participations_overview.js
     scan.html              QR-scanner
@@ -41,10 +43,29 @@ source/
     ticket.js
     token.html             Lokale tokeninformatie op het apparaat
     token.js
-    style.css
+    tailwind.input.css     Bron voor Tailwind, gebouwd naar app.css
+    app.css                Gegenereerd (zie 'Frontend-assets bouwen'), wel in git
+    vendor/                Gegenereerde vendor-JS (html5-qrcode, lucide), wel in git
+scripts/
+  build-assets.mjs         Bouwt vendor-assets naar source/html/vendor/
 testing/
   ...                      Test- en voorbeelddata
 ```
+
+## Frontend-assets bouwen
+
+De frontend gebruikt Tailwind CSS en een paar vendor-libraries
+(`html5-qrcode`, `lucide`). De gegenereerde bestanden (`source/html/app.css`
+en `source/html/vendor/*`) staan in git, dus een verse checkout werkt zonder
+build-stap. Bouw ze opnieuw na het aanpassen van `tailwind.input.css`,
+`tailwind.config.js` of de vendor-dependencies:
+
+```bash
+npm install
+npm run build:assets   # build:css (Tailwind) + build:vendor (scripts/build-assets.mjs)
+```
+
+Commit de gegenereerde bestanden mee met je wijziging.
 
 ## Installatie en starten
 
@@ -62,13 +83,21 @@ testing/
    source/api-key-2.txt
    ```
 
-3. **Kies optioneel een lokale database**
+3. **Configureer optioneel via environment variables**
 
    ```bash
    export CONGRESSUS_CACHE_DB=congressus_cache.db
+   export MAX_SCAN_DAYS=7
+   export STALE_EVENT_REFRESH_DAYS=2
+   export APK_CHECK_MAX_WORKERS=4
    ```
 
-   Als je dit niet zet, gebruikt de app standaard `/db/congressus_cache.db`.
+   | Variabele                   | Standaard                    | Betekenis                                              |
+   |------------------------------|-------------------------------|---------------------------------------------------------|
+   | `CONGRESSUS_CACHE_DB`         | `/db/congressus_cache.db`     | Pad naar de lokale SQLite-cache                          |
+   | `MAX_SCAN_DAYS`                | `7`                            | Max. aantal dagen dat scannen voor een evenement toegestaan is |
+   | `STALE_EVENT_REFRESH_DAYS`     | `2`                            | Na hoeveel dagen een evenement als verouderd wordt beschouwd en automatisch ververst |
+   | `APK_CHECK_MAX_WORKERS`        | `4`                            | Max. aantal parallelle workers voor APK-status-opvraging bij de RDW |
 
 4. **Start de backend**
 
@@ -82,7 +111,25 @@ testing/
    - Admin: [http://localhost:8000/html/admin.html](http://localhost:8000/html/admin.html)
    - Gebruikershomepage: [http://localhost:8000/html/index.html](http://localhost:8000/html/index.html)
 
-   Let op: voor `admin.html` moet je eerst inloggen met **basic authentication** met een geldige gebruikersnaam en wachtwoord.
+   Let op: de applicatie zelf implementeert geen inlogscherm voor `admin.html`.
+   Beveiliging wordt geregeld op infrastructuurniveau en verschilt per
+   omgeving — zie [Authenticatie op admin.html per omgeving](#authenticatie-op-adminhtml-per-omgeving).
+
+## Authenticatie op admin.html per omgeving
+
+`admin.html` bevat zelf geen login-logica; de toegang wordt buiten de
+applicatie (op infrastructuurniveau) beveiligd, en dat verschilt per
+omgeving:
+
+| Omgeving                     | Beveiliging van `admin.html`                                                        |
+|-------------------------------|----------------------------------------------------------------------------------------|
+| Test (`anvt-dev.gemert.net`)  | **Basic authentication** (gebruikersnaam/wachtwoord), ingesteld op de server/ingress, niet in deze repo. |
+| Productie (`scan.anvt.nl`)    | **Google OAuth via `oauth2-proxy`** (zie `k8s-manifests/oauth2-proxy-deployment.yaml`), beperkt tot het `anvt.nl`-e-maildomein. |
+| Lokaal (`uvicorn --reload`)   | **Geen** authenticatie — `admin.html` is direct en zonder login bereikbaar.            |
+
+Zonder geldige inloggegevens (test) of een geautoriseerd Google-account
+(productie) krijg je geen toegang tot de adminpagina, ook niet als je de URL
+rechtstreeks opent.
 
 ## Gebruik als admin
 
@@ -90,13 +137,12 @@ De adminpagina is het startpunt voor beheer. Hier beheer je zowel toegang als ca
 
 ### 0. Inloggen op de adminpagina
 
-Voordat je `admin.html` kunt gebruiken, moet je eerst authenticeren met **basic authentication**.
+Afhankelijk van de omgeving moet je eerst inloggen voordat je `admin.html`
+kunt gebruiken — zie [Authenticatie op admin.html per omgeving](#authenticatie-op-adminhtml-per-omgeving).
 
 1. Open `admin.html`.
-2. Log in met de beheergebruikersnaam en het bijbehorende wachtwoord.
+2. Log in met basic authentication (test) of je Google-account (productie).
 3. Pas daarna krijg je toegang tot tokenbeheer en cachebeheer.
-
-Zonder deze inloggegevens kun je de adminpagina niet gebruiken, ook niet als je de URL rechtstreeks opent.
 
 ### 1. Toegangstoken genereren
 
@@ -223,9 +269,9 @@ Globaal proces:
 
 ### Frontend / toegang
 
-- `GET /html/index.html`
-- `GET /html/admin.html`
-- `GET /html/scan.html`
+- `GET /` — health-/rootcheck
+- `GET /html` / `GET /html/` — redirect/index van de HTML-frontend
+- `GET /html/{page_name}` — serveert een pagina uit `source/html/` (bv. `index.html`, `admin.html`, `scan.html`)
 - `GET /auth/validate?token=...`
 
 ### Tokens
@@ -245,7 +291,11 @@ Globaal proces:
 - `GET /ticket/{event_id}/{obj_id}`
 - `GET /ticket/{event_id}/{obj_id}/{new_status}`
 - `GET /ticket/by-access-key/{access_key}`
-- `GET /scan-ticket/{event_id}/{ticket_id}`
+- `GET /scan-ticket/{event_id}/{obj_id}`
+- `GET /members`
+- `GET /kentekens`
+- `POST /check-apk/{event_id}` — start APK-controle voor kentekens van een evenement
+- `GET /apk-status/{event_id}` — huidige APK-status per kenteken voor een evenement
 
 ### Admin cachebeheer
 
@@ -278,4 +328,14 @@ Verlopen tokens worden automatisch opgeschoond.
 - backendcode staat in `source/main.py`;
 - de tokenlogica voor afgeschermde pagina’s staat in `source/html/auth.js`;
 - de adminpagina is bedoeld voor beheerders op een vertrouwde omgeving;
-- tokengebruikers horen via een gedeelde URL binnen te komen, niet via `admin.html`.
+- tokengebruikers horen via een gedeelde URL binnen te komen, niet via `admin.html`;
+- na wijzigingen aan `tailwind.input.css`, `tailwind.config.js` of vendor-dependencies:
+  `npm install && npm run build:assets` uitvoeren en de gegenereerde bestanden
+  (`source/html/app.css`, `source/html/vendor/*`) meecommitten;
+- `admin.html` is zelf niet beveiligd met authenticatie; dit gebeurt op
+  infrastructuurniveau en verschilt per omgeving (basic auth op test,
+  Google OAuth via `oauth2-proxy` op productie) — zie
+  [Authenticatie op admin.html per omgeving](#authenticatie-op-adminhtml-per-omgeving);
+- deploy-manifests: `k8s-manifests/` (productie) en `k8s-manifests/dev/` (test);
+  ingress/routing voor beide omgevingen wordt buiten deze repo op de server
+  beheerd.
