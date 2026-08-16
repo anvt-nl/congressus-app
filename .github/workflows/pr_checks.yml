@@ -31,9 +31,13 @@ jobs:
           dockerfile: Dockerfile
 
       - name: Run Superlinter
-        uses: super-linter/super-linter@v8.3.0
+        # Use the slim image (fewer preinstalled linters -> much faster pull/startup)
+        # and only lint files changed in this PR instead of the whole codebase.
+        uses: super-linter/super-linter/slim@v8.3.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEFAULT_BRANCH: main
+          VALIDATE_ALL_CODEBASE: false
           VALIDATE_ENV: false
           VALIDATE_GO: false
           VALIDATE_JSCPD: false
