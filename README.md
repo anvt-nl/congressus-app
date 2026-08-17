@@ -344,7 +344,13 @@ Verlopen tokens worden automatisch opgeschoond.
   Deployment/Service `oauth2-proxy`). Dit bestand is uitsluitend voor
   productie (namespace `anvt`) — `oauth2-proxy` wordt bewust **niet**
   geïnstalleerd op test (namespace `anvt-dev`), waar `admin.html` basic auth
-  gebruikt. Het bijbehorende `oauth2-proxy`-secret
+  gebruikt. **`all-one.yml` is gegenereerd** door
+  `./scripts/generate-prod-manifest.sh` op basis van de losse manifests in
+  `k8s-manifests/` (die de enige bron van waarheid blijven — niet
+  handmatig bewerken). Na een wijziging aan een van die losse bestanden:
+  draai het script opnieuw en commit het resultaat; de `PR Checks`-workflow
+  faalt (via `./scripts/generate-prod-manifest.sh --check`) als
+  `all-one.yml` niet up-to-date is. Het bijbehorende `oauth2-proxy`-secret
   (`client-id`/`client-secret`/`cookie-secret`) staat om gevoeligheidsredenen
   niet in de repo — zie `k8s-manifests/oauth2-proxy-secret.yaml`;
 - draai `./scripts/run-ci-checks.sh` (vereist Docker) om lokaal dezelfde

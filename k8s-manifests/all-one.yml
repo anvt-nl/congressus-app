@@ -1,3 +1,15 @@
+# Dit bestand is GEGENEREERD door scripts/generate-prod-manifest.sh
+# op basis van de losse manifests in k8s-manifests/. Niet handmatig
+# bewerken -- pas de losse bestanden aan en draai het script opnieuw.
+#
+# Alleen voor PRODUCTIE (namespace anvt), inclusief oauth2-proxy.
+# Test (anvt-dev) gebruikt k8s-manifests/dev/ en heeft GEEN oauth2-proxy
+# (admin.html wordt daar met basic auth beveiligd).
+#
+# Toepassen: kubectl -n anvt apply -f k8s-manifests/all-one.yml
+# Let op: het oauth2-proxy secret (client-id/client-secret/cookie-secret)
+# staat niet in de repo, zie k8s-manifests/oauth2-proxy-secret.yaml.
+---
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -134,9 +146,6 @@ spec:
       targetPort: 8000
       nodePort: 30001
 ---
-# oauth2-proxy: beveiligt admin.html/scan-app op PRODUCTIE (scan.anvt.nl) met
-# Google OAuth. Wordt uitsluitend op productie (namespace anvt) toegepast,
-# NIET op de test-omgeving (anvt-dev), waar admin.html basic-auth gebruikt.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -211,7 +220,3 @@ spec:
       port: 4180
       targetPort: 4180
       nodePort: 30003
----
-# Let op: het oauth2-proxy-secret (client-id/client-secret/cookie-secret) staat
-# NIET in de repo (bevat gevoelige waarden) en moet apart aangemaakt worden op
-# de server. Zie k8s-manifests/oauth2-proxy-secret.yaml voor de vindplaats.
