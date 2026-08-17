@@ -92,12 +92,12 @@ Commit de gegenereerde bestanden mee met je wijziging.
    export APK_CHECK_MAX_WORKERS=4
    ```
 
-   | Variabele                   | Standaard                    | Betekenis                                              |
-   |------------------------------|-------------------------------|---------------------------------------------------------|
-   | `CONGRESSUS_CACHE_DB`         | `/db/congressus_cache.db`     | Pad naar de lokale SQLite-cache                          |
-   | `MAX_SCAN_DAYS`                | `7`                            | Max. aantal dagen dat scannen voor een evenement toegestaan is |
-   | `STALE_EVENT_REFRESH_DAYS`     | `2`                            | Na hoeveel dagen een evenement als verouderd wordt beschouwd en automatisch ververst |
-   | `APK_CHECK_MAX_WORKERS`        | `4`                            | Max. aantal parallelle workers voor APK-status-opvraging bij de RDW |
+   | Variabele                  | Standaard                 | Betekenis                                                                            |
+   | -------------------------- | ------------------------- | ------------------------------------------------------------------------------------ |
+   | `CONGRESSUS_CACHE_DB`      | `/db/congressus_cache.db` | Pad naar de lokale SQLite-cache                                                      |
+   | `MAX_SCAN_DAYS`            | `7`                       | Max. aantal dagen dat scannen voor een evenement toegestaan is                       |
+   | `STALE_EVENT_REFRESH_DAYS` | `2`                       | Na hoeveel dagen een evenement als verouderd wordt beschouwd en automatisch ververst |
+   | `APK_CHECK_MAX_WORKERS`    | `4`                       | Max. aantal parallelle workers voor APK-status-opvraging bij de RDW                  |
 
 4. **Start de backend**
 
@@ -107,7 +107,6 @@ Commit de gegenereerde bestanden mee met je wijziging.
    ```
 
 5. **Open de app**
-
    - Admin: [http://localhost:8000/html/admin.html](http://localhost:8000/html/admin.html)
    - Gebruikershomepage: [http://localhost:8000/html/index.html](http://localhost:8000/html/index.html)
 
@@ -121,11 +120,11 @@ Commit de gegenereerde bestanden mee met je wijziging.
 applicatie (op infrastructuurniveau) beveiligd, en dat verschilt per
 omgeving:
 
-| Omgeving                     | Beveiliging van `admin.html`                                                        |
-|-------------------------------|----------------------------------------------------------------------------------------|
-| Test (`anvt-dev.gemert.net`)  | **Basic authentication** (gebruikersnaam/wachtwoord), ingesteld op de server/ingress, niet in deze repo. |
-| Productie (`scan.anvt.nl`)    | **Google OAuth via `oauth2-proxy`** (zie `k8s-manifests/oauth2-proxy-deployment.yaml`), beperkt tot het `anvt.nl`-e-maildomein. |
-| Lokaal (`uvicorn --reload`)   | **Geen** authenticatie — `admin.html` is direct en zonder login bereikbaar.            |
+| Omgeving                     | Beveiliging van `admin.html`                                                                                                    |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Test (`anvt-dev.gemert.net`) | **Basic authentication** (gebruikersnaam/wachtwoord), ingesteld op de server/ingress, niet in deze repo.                        |
+| Productie (`scan.anvt.nl`)   | **Google OAuth via `oauth2-proxy`** (zie `k8s-manifests/oauth2-proxy-deployment.yaml`), beperkt tot het `anvt.nl`-e-maildomein. |
+| Lokaal (`uvicorn --reload`)  | **Geen** authenticatie — `admin.html` is direct en zonder login bereikbaar.                                                     |
 
 Zonder geldige inloggegevens (test) of een geautoriseerd Google-account
 (productie) krijg je geen toegang tot de adminpagina, ook niet als je de URL
@@ -338,4 +337,25 @@ Verlopen tokens worden automatisch opgeschoond.
   [Authenticatie op admin.html per omgeving](#authenticatie-op-adminhtml-per-omgeving);
 - deploy-manifests: `k8s-manifests/` (productie) en `k8s-manifests/dev/` (test);
   ingress/routing voor beide omgevingen wordt buiten deze repo op de server
-  beheerd.
+  beheerd;
+- draai `./scripts/run-ci-checks.sh` (vereist Docker) om lokaal dezelfde
+  linting- en build-checks als de `PR Checks`-workflow uit te voeren
+  vóórdat je een PR opent — zie [Lokaal CI-checks draaien](#lokaal-ci-checks-draaien).
+
+## Lokaal CI-checks draaien
+
+Om te voorkomen dat een PR onnodig faalt op checks die je ook lokaal kunt
+draaien, bevat `scripts/run-ci-checks.sh` een lokale spiegel van de
+belangrijkste jobs uit `.github/workflows/pr_checks.yml` (Hadolint,
+Super-linter met dezelfde configuratie, de Docker-build, Dockle en de
+integratietest). Vereist alleen Docker:
+
+```bash
+./scripts/run-ci-checks.sh         # alle checks
+./scripts/run-ci-checks.sh lint    # alleen Hadolint + Super-linter
+./scripts/run-ci-checks.sh build   # alleen Docker build + Dockle + integratietest
+```
+
+De ClamAV-scan en de `pr_summary`-job worden bewust niet lokaal gedraaid
+(ClamAV vereist een systeemdaemon/database-update; `pr_summary` post enkel
+een PR-comment).

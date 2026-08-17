@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 for file in get_participation_*.json; do
     # Extract the base filename without extension
     basename="${file%.json}"

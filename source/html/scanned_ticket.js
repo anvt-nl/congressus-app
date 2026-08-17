@@ -234,7 +234,7 @@ async function fetchTicketDetails() {
 			${ticketTypesTable}
 			${vehicleInfo}
 		`;
-  } catch (err) {
+  } catch (_err) {
     document.getElementById("ticketDetails").innerHTML =
       '<div class="text-red-500">Failed to load ticket details.</div>';
   }

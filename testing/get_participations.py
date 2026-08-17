@@ -39,11 +39,11 @@ while next_page:
     if next_page:
         page = resp.json().get('next_num', page + 1)
 result = {'data': data,
-            'total': len(data),
-            'nr_pages': page,
-            'event_id': event_id,
-            'last_updated': time.strftime('%Y-%m-%d %H:%M:%S')
-             }
+          'total': len(data),
+          'nr_pages': page,
+          'event_id': event_id,
+          'last_updated': time.strftime('%Y-%m-%d %H:%M:%S')
+          }
 
 with open(f'{working_directory}/{script_name}_{event_id}.json', 'w') as f:
     json.dump(result, f, indent=4)

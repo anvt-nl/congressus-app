@@ -6,7 +6,7 @@ import json
 # with open('events2.json') as f:
 with open('events.json') as f:
     data = f.read()
-    
+
 result = ast.literal_eval(data)
 json_output = json.dumps(result, indent=4)
 print(json_output)

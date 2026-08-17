@@ -13,7 +13,7 @@ COPY source/requirements.txt /app/requirements.txt
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    curl=7.88.1-10+deb12u14 \
+    curl=7.88.1-10+deb12u15 \
     build-essential=12.9 && \
     pip install --no-cache-dir -r /app/requirements.txt && \
     apt-get remove -y build-essential && \

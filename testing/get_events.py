@@ -36,7 +36,7 @@ result = {'data': data,
           'total': len(data),
           'nr_pages': params['page'],
           'last_updated': time.strftime('%Y-%m-%d %H:%M:%S')
-         }
+          }
 
 with open(f'{working_directory}/{script_name}.json', 'w') as f:
     json.dump(result, f, indent=4)
