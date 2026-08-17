@@ -97,6 +97,16 @@ function playSound(type) {
   } catch {}
 }
 
+// Haptic feedback for the scan result, when supported by the device/browser
+// (e.g. not supported on iOS Safari). Approved: 2 short pulses.
+// Rejected (already scanned / invalid QR): 1 long pulse.
+function vibrateResult(approved) {
+  try {
+    if (typeof navigator.vibrate !== "function") return;
+    navigator.vibrate(approved ? [80, 100, 80] : [400]);
+  } catch {}
+}
+
 async function fetchTicketDetails() {
   if (!eventId || !ticketId) {
     document.getElementById("ticketDetails").innerHTML =
@@ -144,25 +154,26 @@ async function fetchTicketDetails() {
     }
 
     // Set background to green if scan is a string and successful
-    if (typeof data.scan === 'string' && data.scan === "OK") {
-      document.body.style.backgroundColor = 'green';
-      const ticketDetailsDiv = document.getElementById('ticketDetails');
+    if (typeof data.scan === "string" && data.scan === "OK") {
+      document.body.style.backgroundColor = "green";
+      const ticketDetailsDiv = document.getElementById("ticketDetails");
       if (ticketDetailsDiv) {
-        ticketDetailsDiv.style.backgroundColor = '#d2ffd2'; // light green
+        ticketDetailsDiv.style.backgroundColor = "#d2ffd2"; // light green
       }
       playSound("victory");
-    }
-    else {
+      vibrateResult(true);
+    } else {
       // Set the default background of ticketDetails to light red
-      document.body.style.backgroundColor = 'red';
-      const ticketDetailsDiv = document.getElementById('ticketDetails');
+      document.body.style.backgroundColor = "red";
+      const ticketDetailsDiv = document.getElementById("ticketDetails");
       if (ticketDetailsDiv) {
-        ticketDetailsDiv.style.backgroundColor = '#ffe5e5'; // light red
+        ticketDetailsDiv.style.backgroundColor = "#ffe5e5"; // light red
       }
       playSound("buzz-deep-drop");
-   
+      vibrateResult(false);
+
       // Show warning overlay if data.scan contains a string
-      if (typeof data.scan === 'string' && data.scan) {
+      if (typeof data.scan === "string" && data.scan) {
         const overlay = document.createElement('div');
         overlay.id = "scanWarningOverlay";
         overlay.style.position = 'fixed';
