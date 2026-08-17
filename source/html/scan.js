@@ -302,7 +302,7 @@ function onScanSuccess(decodedText, _decodedResult) {
           showError(err.message);
         }
       });
-  } catch (e) {
+  } catch (_e) {
     loadingContainer.classList.add("hidden");
     showError("Invalid QR Code: Scanned data is not valid JSON.");
     // Show raw text for debugging if needed, or keeping it hidden to avoid confusion

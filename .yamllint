@@ -1,0 +1,21 @@
+# yamllint configuration for this repo.
+#
+# The k8s manifests and GitHub Actions workflows in this repo intentionally
+# use compact list indentation (2 spaces, sequences not indented under their
+# key) and don't prefix files with a "---" document-start marker. Both are
+# valid YAML and match common kubectl/kustomize conventions, so we relax
+# those two default rules instead of rewriting every manifest. Line length is
+# relaxed to accommodate GitHub Actions expression syntax which is often
+# longer than 80 characters.
+extends: default
+
+rules:
+  document-start: disable
+  indentation:
+    spaces: 2
+    indent-sequences: consistent
+  braces:
+    min-spaces-inside-empty: 0
+    max-spaces-inside-empty: 0
+  line-length:
+    max: 130

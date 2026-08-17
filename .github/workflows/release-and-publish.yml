@@ -137,9 +137,12 @@ jobs:
       - name: Update image version in manifest
         run: |
           NEW_TAG="${{ needs.create_tag.outputs.new_tag }}"
+          OWNER="${{ github.repository_owner }}"
+          IMAGE="ghcr.io/${OWNER}/congressus-app"
           # Use sed to update the image tag.
           # Matches 'image: ghcr.io/<owner>/<repo>:<version>'
-          sed -i "s|image: ghcr.io/${{ github.repository_owner }}/congressus-app:.*|image: ghcr.io/${{ github.repository_owner }}/congressus-app:${NEW_TAG}|" k8s-manifests/deployment.yaml k8s-manifests/dev/deployment.yaml
+          sed -i "s|image: ${IMAGE}:.*|image: ${IMAGE}:${NEW_TAG}|" \
+            k8s-manifests/deployment.yaml k8s-manifests/dev/deployment.yaml
 
       - name: Commit and push changes
         run: |

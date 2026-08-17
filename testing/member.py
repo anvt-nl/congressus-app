@@ -36,11 +36,7 @@ result = {'data': data,
           'total': len(data),
           'nr_pages': params['page'],
           'last_updated': time.strftime('%Y-%m-%d %H:%M:%S')
-         }
-
-
-
-
+          }
 
 with open(f'{working_directory}/{script_name}.json', 'w') as f:
     json.dump(result, f, indent=4)
@@ -72,6 +68,6 @@ for member in data:
         'name': name,
         'member_to': member_to
     }
-print(f"Extracted {len(members)} members with id and name.")    
+print(f"Extracted {len(members)} members with id and name.")
 for id, info in members.items():
     print(f"Member ID: {id:<10}, Member To: {info['member_to']:<12}, Name: {info['name']}")

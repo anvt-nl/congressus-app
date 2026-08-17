@@ -107,7 +107,6 @@ Commit de gegenereerde bestanden mee met je wijziging.
    ```
 
 5. **Open de app**
-
    - Admin: [http://localhost:8000/html/admin.html](http://localhost:8000/html/admin.html)
    - Gebruikershomepage: [http://localhost:8000/html/index.html](http://localhost:8000/html/index.html)
 

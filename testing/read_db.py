@@ -27,9 +27,12 @@ for table_name in [table[0] for table in tables]:
     for column in columns:
         print(f"  - {column[1]} ({column[2]})")
 
-for participation_id, event_id, data, last_updated in cursor.execute("SELECT participation_id, event_id, data, last_updated FROM participations;"):
-    print(f"Participation ID: {participation_id}, Event ID: {event_id}, Data: {data}, Last Updated: {last_updated}")
+for participation_id, event_id, data, last_updated in cursor.execute(
+    "SELECT participation_id, event_id, data, last_updated FROM participations;"
+):
+    print(
+        f"Participation ID: {participation_id}, Event ID: {event_id}, "
+        f"Data: {data}, Last Updated: {last_updated}"
+    )
 
 conn.close()
-
-

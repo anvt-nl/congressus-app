@@ -42,7 +42,8 @@ GET /ticket/{event_id}/{obj_id}
 GET /ticket/{event_id}/{obj_id}/{new_status}
     Updates the status of a ticket and returns the result
 
-All endpoints return JSON unless otherwise specified. Errors are returned with appropriate HTTP status codes and messages.
+All endpoints return JSON unless otherwise specified. Errors are returned
+with appropriate HTTP status codes and messages.
 """
 
 import concurrent.futures
@@ -642,7 +643,7 @@ def load_participations_with_stats(
 ) -> List[Dict]:
     try:
         cursor.execute(
-            f"""
+            """
             WITH ticket_summary AS (
                 SELECT
                     t.event_id,
@@ -1029,7 +1030,8 @@ def scan_ticket(event_id: str, obj_id: str):
             datetime.now() - event_date
         ).days > MAX_SCAN_DAYS:
             ticket_data["scan"] = (
-                f"Scannen niet toegestaan: evenement is meer dan {MAX_SCAN_DAYS} dagen geleden of 3 dagen in de toekomst"
+                f"Scannen niet toegestaan: evenement is meer dan "
+                f"{MAX_SCAN_DAYS} dagen geleden of 3 dagen in de toekomst"
             )
             return ticket_data
     if ticket_data.get("member_id") is not None:
@@ -1272,7 +1274,8 @@ def filter_events(
         present_leden = stats.get("present_leden", 0)
         present_vrijrijders = stats.get("present_vrijrijders", 0)
         log(
-            f"Event {event['id']} - Leden: {leden_sold_tickets}/{leden_num_tickets}, Niet leden: {niet_leden_sold_tickets}/{niet_leden_num_tickets}"
+            f"Event {event['id']} - Leden: {leden_sold_tickets}/{leden_num_tickets}, "
+            f"Niet leden: {niet_leden_sold_tickets}/{niet_leden_num_tickets}"
         )
         return_events.append(
             {
@@ -1826,7 +1829,9 @@ def validate_member_data(member_name: str, member_to_str: str, date_str: str) ->
     This function validates is a member has a valid membership.
 
     :param member_name: Type of membership (e.g. "Lid", "Lid (Geen verloopdatum)", "Ere-lid", etc.)
-    :param member_to_str: The date until the membership is valid, in string format (e.g. "2024-12-31"). Can be empty or None if no date is provided.
+    :param member_to_str: The date until the membership is valid, in string
+        format (e.g. "2024-12-31"). Can be empty or None if no date is
+        provided.
     :param date_str: The date the membership should be valid for.
 
     :return: A boolean indicating whether the membership is valid.
