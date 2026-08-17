@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Genereert het productie-manifest (namespace, opslag, congressus-app en
-# oauth2-proxy) door de losse manifests in k8s-manifests/ samen te voegen en
-# naar stdout te schrijven. Er wordt bewust GEEN bestand in de repo
+# oauth2-proxy) door de losse manifests in k8s-manifests/prod/ samen te
+# voegen en naar stdout te schrijven. Er wordt bewust GEEN bestand in de repo
 # bijgehouden: de losse manifests zijn de enige bron van waarheid en dit
 # script voorkomt dat je ze los na elkaar moet `kubectl apply`-en.
 #
@@ -12,7 +12,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-MANIFESTS_DIR="k8s-manifests"
+MANIFESTS_DIR="k8s-manifests/prod"
 
 # Volgorde is voor de leesbaarheid (namespace/opslag/app/proxy), niet
 # functioneel: `kubectl apply -f` verwerkt alle resources in het bestand.
@@ -35,7 +35,7 @@ echo "# Test (anvt-dev) gebruikt k8s-manifests/dev/ en heeft GEEN oauth2-proxy"
 echo "# (admin.html wordt daar met basic auth beveiligd)."
 echo "#"
 echo "# Let op: het oauth2-proxy secret (client-id/client-secret/cookie-secret)"
-echo "# staat niet in de repo, zie k8s-manifests/oauth2-proxy-secret.yaml."
+echo "# staat niet in de repo, zie k8s-manifests/prod/oauth2-proxy-secret.yaml."
 for f in "${FILES[@]}"; do
   echo "---"
   cat "$MANIFESTS_DIR/$f"
