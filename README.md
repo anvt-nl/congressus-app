@@ -337,7 +337,16 @@ Verlopen tokens worden automatisch opgeschoond.
   [Authenticatie op admin.html per omgeving](#authenticatie-op-adminhtml-per-omgeving);
 - deploy-manifests: `k8s-manifests/` (productie) en `k8s-manifests/dev/` (test);
   ingress/routing voor beide omgevingen wordt buiten deze repo op de server
-  beheerd;
+  beheerd. Voor productie kan `k8s-manifests/all-one.yml` in één keer worden
+  toegepast (`kubectl -n anvt apply -f k8s-manifests/all-one.yml`) en bevat
+  alle productie-resources inclusief `oauth2-proxy`
+  (Namespace, PersistentVolume(Claim), Deployment/Service `congressus-app`,
+  Deployment/Service `oauth2-proxy`). Dit bestand is uitsluitend voor
+  productie (namespace `anvt`) — `oauth2-proxy` wordt bewust **niet**
+  geïnstalleerd op test (namespace `anvt-dev`), waar `admin.html` basic auth
+  gebruikt. Het bijbehorende `oauth2-proxy`-secret
+  (`client-id`/`client-secret`/`cookie-secret`) staat om gevoeligheidsredenen
+  niet in de repo — zie `k8s-manifests/oauth2-proxy-secret.yaml`;
 - draai `./scripts/run-ci-checks.sh` (vereist Docker) om lokaal dezelfde
   linting- en build-checks als de `PR Checks`-workflow uit te voeren
   vóórdat je een PR opent — zie [Lokaal CI-checks draaien](#lokaal-ci-checks-draaien).

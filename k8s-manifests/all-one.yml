@@ -1,0 +1,217 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: anvt
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: congressus-cache
+  namespace: anvt
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  hostPath:
+    path: /data2/anvt/congressus-cache
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: congressus-cache
+  namespace: anvt
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  volumeName: congressus-cache
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: congressus-app
+  namespace: anvt
+  annotations:
+    checkov.io/skip1: "CKV_K8S_40: Not required for this deployment"
+    checkov.io/skip2: "CKV_K8S_43: Digest not needed for this deployment"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: congressus-app
+  template:
+    metadata:
+      labels:
+        app: congressus-app
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      containers:
+        - name: congressus-app
+          image: ghcr.io/anvt-nl/congressus-app:0.81.0
+          imagePullPolicy: Always
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsUser: 1000
+            runAsGroup: 1000
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - containerPort: 8000
+          args:
+            - "python"
+            - "-m"
+            - "uvicorn"
+            - "main:app"
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "8000"
+            - "--workers"
+            - "4"
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 250m
+            limits:
+              memory: 512Mi
+              cpu: 500m
+          env:
+            - name: CONGRESSUS_CACHE_DB
+              value: /db/congressus-cache.db
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          volumeMounts:
+            - name: congressus-cache
+              mountPath: /db
+            - name: congressus-api-key
+              mountPath: /app/api-key-2.txt
+              subPath: api-key-2.txt
+              readOnly: true
+      volumes:
+        - name: congressus-cache
+          persistentVolumeClaim:
+            claimName: congressus-cache
+        - name: congressus-api-key
+          secret:
+            secretName: congressus-api
+            items:
+              - key: api-key
+                path: api-key-2.txt
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: congressus-app
+  namespace: anvt
+spec:
+  type: NodePort
+  selector:
+    app: congressus-app
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+      nodePort: 30001
+---
+# oauth2-proxy: beveiligt admin.html/scan-app op PRODUCTIE (scan.anvt.nl) met
+# Google OAuth. Wordt uitsluitend op productie (namespace anvt) toegepast,
+# NIET op de test-omgeving (anvt-dev), waar admin.html basic-auth gebruikt.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy
+  namespace: anvt
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oauth2-proxy
+  template:
+    metadata:
+      labels:
+        app: oauth2-proxy
+    spec:
+      containers:
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+          args:
+            - --provider=google
+            - --email-domain=anvt.nl
+            - --upstream=http://congressus-app:8000
+            - --redirect-url=https://scan.anvt.nl/oauth2/callback
+            - --http-address=0.0.0.0:4180
+            - --cookie-secure=true
+            - --cookie-name=_oauth2_proxy_anvt
+            - --silence-ping-logging=true
+          env:
+            - name: OAUTH2_PROXY_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: oauth2-proxy
+                  key: client-id
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: oauth2-proxy
+                  key: client-secret
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: oauth2-proxy
+                  key: cookie-secret
+          ports:
+            - containerPort: 4180
+          resources:
+            requests:
+              memory: 64Mi
+              cpu: 50m
+            limits:
+              memory: 128Mi
+              cpu: 100m
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-proxy
+  namespace: anvt
+spec:
+  type: NodePort
+  selector:
+    app: oauth2-proxy
+  ports:
+    - protocol: TCP
+      port: 4180
+      targetPort: 4180
+      nodePort: 30003
+---
+# Let op: het oauth2-proxy-secret (client-id/client-secret/cookie-secret) staat
+# NIET in de repo (bevat gevoelige waarden) en moet apart aangemaakt worden op
+# de server. Zie k8s-manifests/oauth2-proxy-secret.yaml voor de vindplaats.
