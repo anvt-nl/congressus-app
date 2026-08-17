@@ -25,9 +25,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Check k8s-manifests/all-one.yml is up-to-date
-        run: ./scripts/generate-prod-manifest.sh --check
-
       - name: Run Hadolint
         uses: hadolint/hadolint-action@v3.3.0
         with:

@@ -337,20 +337,18 @@ Verlopen tokens worden automatisch opgeschoond.
   [Authenticatie op admin.html per omgeving](#authenticatie-op-adminhtml-per-omgeving);
 - deploy-manifests: `k8s-manifests/` (productie) en `k8s-manifests/dev/` (test);
   ingress/routing voor beide omgevingen wordt buiten deze repo op de server
-  beheerd. Voor productie kan `k8s-manifests/all-one.yml` in één keer worden
-  toegepast (`kubectl -n anvt apply -f k8s-manifests/all-one.yml`) en bevat
-  alle productie-resources inclusief `oauth2-proxy`
-  (Namespace, PersistentVolume(Claim), Deployment/Service `congressus-app`,
-  Deployment/Service `oauth2-proxy`). Dit bestand is uitsluitend voor
-  productie (namespace `anvt`) — `oauth2-proxy` wordt bewust **niet**
-  geïnstalleerd op test (namespace `anvt-dev`), waar `admin.html` basic auth
-  gebruikt. **`all-one.yml` is gegenereerd** door
-  `./scripts/generate-prod-manifest.sh` op basis van de losse manifests in
-  `k8s-manifests/` (die de enige bron van waarheid blijven — niet
-  handmatig bewerken). Na een wijziging aan een van die losse bestanden:
-  draai het script opnieuw en commit het resultaat; de `PR Checks`-workflow
-  faalt (via `./scripts/generate-prod-manifest.sh --check`) als
-  `all-one.yml` niet up-to-date is. Het bijbehorende `oauth2-proxy`-secret
+  beheerd. De losse manifests in `k8s-manifests/` zijn de enige bron van
+  waarheid (Namespace, PersistentVolume(Claim), Deployment/Service
+  `congressus-app`, Deployment/Service `oauth2-proxy`); er wordt geen
+  samengevoegd manifest in de repo bijgehouden om te voorkomen dat dit uit de
+  pas gaat lopen. Om productie in één keer toe te passen kun je alle
+  productie-manifests los meegeven aan `kubectl` of ze on-the-fly
+  samenvoegen met `./scripts/generate-prod-manifest.sh`, bijvoorbeeld:
+  `kubectl -n anvt apply -f k8s-manifests/namespace.yaml -f k8s-manifests/persistent-volume.yaml -f k8s-manifests/persistent-volume-claim.yaml -f k8s-manifests/deployment.yaml -f k8s-manifests/service.yaml -f k8s-manifests/oauth2-proxy-deployment.yaml -f k8s-manifests/oauth2-proxy-service.yaml`
+  of `./scripts/generate-prod-manifest.sh | kubectl -n anvt apply -f -`.
+  `oauth2-proxy` is uitsluitend voor productie (namespace `anvt`) en wordt
+  bewust **niet** geïnstalleerd op test (namespace `anvt-dev`), waar
+  `admin.html` basic auth gebruikt. Het bijbehorende `oauth2-proxy`-secret
   (`client-id`/`client-secret`/`cookie-secret`) staat om gevoeligheidsredenen
   niet in de repo — zie `k8s-manifests/oauth2-proxy-secret.yaml`;
 - draai `./scripts/run-ci-checks.sh` (vereist Docker) om lokaal dezelfde
