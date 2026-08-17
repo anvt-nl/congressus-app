@@ -120,11 +120,11 @@ Commit de gegenereerde bestanden mee met je wijziging.
 applicatie (op infrastructuurniveau) beveiligd, en dat verschilt per
 omgeving:
 
-| Omgeving                     | Beveiliging van `admin.html`                                                                                                    |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Test (`anvt-dev.gemert.net`) | **Basic authentication** (gebruikersnaam/wachtwoord), ingesteld op de server/ingress, niet in deze repo.                        |
-| Productie (`scan.anvt.nl`)   | **Google OAuth via `oauth2-proxy`** (zie `k8s-manifests/oauth2-proxy-deployment.yaml`), beperkt tot het `anvt.nl`-e-maildomein. |
-| Lokaal (`uvicorn --reload`)  | **Geen** authenticatie — `admin.html` is direct en zonder login bereikbaar.                                                     |
+| Omgeving                     | Beveiliging van `admin.html`                                                                                                         |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Test (`anvt-dev.gemert.net`) | **Basic authentication** (gebruikersnaam/wachtwoord), ingesteld op de server/ingress, niet in deze repo.                             |
+| Productie (`scan.anvt.nl`)   | **Google OAuth via `oauth2-proxy`** (zie `k8s-manifests/prod/oauth2-proxy-deployment.yaml`), beperkt tot het `anvt.nl`-e-maildomein. |
+| Lokaal (`uvicorn --reload`)  | **Geen** authenticatie — `admin.html` is direct en zonder login bereikbaar.                                                          |
 
 Zonder geldige inloggegevens (test) of een geautoriseerd Google-account
 (productie) krijg je geen toegang tot de adminpagina, ook niet als je de URL
@@ -335,9 +335,22 @@ Verlopen tokens worden automatisch opgeschoond.
   infrastructuurniveau en verschilt per omgeving (basic auth op test,
   Google OAuth via `oauth2-proxy` op productie) — zie
   [Authenticatie op admin.html per omgeving](#authenticatie-op-adminhtml-per-omgeving);
-- deploy-manifests: `k8s-manifests/` (productie) en `k8s-manifests/dev/` (test);
-  ingress/routing voor beide omgevingen wordt buiten deze repo op de server
-  beheerd;
+- deploy-manifests: `k8s-manifests/prod/` (productie) en `k8s-manifests/dev/`
+  (test); ingress/routing voor beide omgevingen wordt buiten deze repo op de
+  server beheerd. De losse manifests in `k8s-manifests/prod/` zijn de enige
+  bron van waarheid (Namespace, PersistentVolume(Claim), Deployment/Service
+  `congressus-app`, Deployment/Service `oauth2-proxy`); er wordt geen
+  samengevoegd manifest in de repo bijgehouden om te voorkomen dat dit uit de
+  pas gaat lopen. Om productie in één keer toe te passen kun je alle
+  productie-manifests los meegeven aan `kubectl` of ze on-the-fly
+  samenvoegen met `./scripts/generate-prod-manifest.sh`, bijvoorbeeld:
+  `kubectl -n anvt apply -f k8s-manifests/prod/namespace.yaml -f k8s-manifests/prod/persistent-volume.yaml -f k8s-manifests/prod/persistent-volume-claim.yaml -f k8s-manifests/prod/deployment.yaml -f k8s-manifests/prod/service.yaml -f k8s-manifests/prod/oauth2-proxy-deployment.yaml -f k8s-manifests/prod/oauth2-proxy-service.yaml`
+  of `./scripts/generate-prod-manifest.sh | kubectl -n anvt apply -f -`.
+  `oauth2-proxy` is uitsluitend voor productie (namespace `anvt`) en wordt
+  bewust **niet** geïnstalleerd op test (namespace `anvt-dev`), waar
+  `admin.html` basic auth gebruikt. Het bijbehorende `oauth2-proxy`-secret
+  (`client-id`/`client-secret`/`cookie-secret`) staat om gevoeligheidsredenen
+  niet in de repo — zie `k8s-manifests/prod/oauth2-proxy-secret.yaml`;
 - draai `./scripts/run-ci-checks.sh` (vereist Docker) om lokaal dezelfde
   linting- en build-checks als de `PR Checks`-workflow uit te voeren
   vóórdat je een PR opent — zie [Lokaal CI-checks draaien](#lokaal-ci-checks-draaien).
